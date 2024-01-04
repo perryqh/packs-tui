@@ -1,0 +1,5 @@
+layer: admin
+dependencies:
+  - packs/admin/user_manager
+  - packs/product_services/cats
+  - packs/product_services/dogs
