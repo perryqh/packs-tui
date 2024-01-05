@@ -61,10 +61,10 @@ impl App {
             ActiveFocus::Left => {
                 self.menu_context.active_context_menu_item.reset_scroll();
                 self.packs.next_pack_list();
-            },
+            }
             ActiveFocus::Right => {
                 self.menu_context.active_context_menu_item.next_scroll();
-            },
+            }
         }
     }
 
@@ -73,10 +73,10 @@ impl App {
             ActiveFocus::Left => {
                 self.menu_context.active_context_menu_item.reset_scroll();
                 self.packs.previous_pack_list();
-            },
+            }
             ActiveFocus::Right => {
                 self.menu_context.active_context_menu_item.previous_scroll();
-            },
+            }
         }
     }
 
@@ -101,7 +101,11 @@ impl App {
     }
 
     pub fn handle_context_menu_d(&mut self) {
-        self.menu_context.active_context_menu_item = ContextMenuItem::Dependents(0);
+        self.menu_context.active_context_menu_item = ContextMenuItem::NoViolationDependents(0);
+    }
+
+    pub fn handle_context_menu_v(&mut self) {
+        self.menu_context.active_context_menu_item = ContextMenuItem::ViolationDependents(0);
     }
 
     pub fn handle_context_menu_i(&mut self) {
@@ -142,28 +146,35 @@ pub enum ActiveFocus {
 #[derive(Copy, Clone, Debug)]
 pub enum ContextMenuItem {
     Info(usize),
-    Dependents(usize),
+    NoViolationDependents(usize),
+    ViolationDependents(usize),
 }
 
 impl ContextMenuItem {
+    pub fn set_scroll(&mut self, s: usize) {
+        match self {
+            ContextMenuItem::Info(scroll) => *scroll = s,
+            ContextMenuItem::NoViolationDependents(scroll) => *scroll = s,
+            ContextMenuItem::ViolationDependents(scroll) => *scroll = s,
+        }
+    }
     pub fn scroll(&self) -> usize {
         match self {
             ContextMenuItem::Info(scroll) => *scroll,
-            ContextMenuItem::Dependents(scroll) => *scroll,
+            ContextMenuItem::NoViolationDependents(scroll) => *scroll,
+            ContextMenuItem::ViolationDependents(scroll) => *scroll,
         }
     }
 
     pub fn reset_scroll(&mut self) {
-        match self {
-            ContextMenuItem::Info(scroll) => *scroll = 0,
-            ContextMenuItem::Dependents(scroll) => *scroll = 0,
-        }
+        self.set_scroll(0);
     }
 
     pub fn next_scroll(&mut self) {
         match self {
             ContextMenuItem::Info(scroll) => *scroll += 1,
-            ContextMenuItem::Dependents(scroll) => *scroll += 1,
+            ContextMenuItem::NoViolationDependents(scroll) => *scroll += 1,
+            ContextMenuItem::ViolationDependents(scroll) => *scroll += 1,
         }
     }
 
@@ -173,12 +184,17 @@ impl ContextMenuItem {
                 if *scroll > 0 {
                     *scroll -= 1;
                 }
-            },
-            ContextMenuItem::Dependents(scroll) => {
+            }
+            ContextMenuItem::NoViolationDependents(scroll) => {
                 if *scroll > 0 {
                     *scroll -= 1;
                 }
-            },
+            }
+            ContextMenuItem::ViolationDependents(scroll) => {
+                if *scroll > 0 {
+                    *scroll -= 1;
+                }
+            }
         }
     }
 }
@@ -187,7 +203,8 @@ impl From<ContextMenuItem> for usize {
     fn from(input: ContextMenuItem) -> usize {
         match input {
             ContextMenuItem::Info(_scroll) => 0,
-            ContextMenuItem::Dependents(_scroll) => 1,
+            ContextMenuItem::NoViolationDependents(_scroll) => 1,
+            ContextMenuItem::ViolationDependents(_scroll) => 2,
         }
     }
 }

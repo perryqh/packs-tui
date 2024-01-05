@@ -1,6 +1,6 @@
-use std::rc::Rc;
+use ratatui::widgets::block::Title;
 use ratatui::{prelude::*, widgets::*};
-use ratatui::widgets::block::{Title};
+use std::rc::Rc;
 
 use crate::app::{ActiveFocus, App, ContextMenuItem, MenuItem};
 
@@ -15,57 +15,213 @@ pub fn render(app: &mut App, frame: &mut Frame) {
 
 fn render_summary(app: &mut App, frame: &mut Frame) {
     let chunks = build_chunks(frame);
-    let top_menu_tabs = build_top_menu(&app);
+    let top_menu_tabs = build_top_menu(app);
     frame.render_widget(top_menu_tabs, chunks[0]);
 }
+
 fn render_actions(app: &mut App, frame: &mut Frame) {
     let chunks = build_chunks(frame);
-    let top_menu_tabs = build_top_menu(&app);
+    let top_menu_tabs = build_top_menu(app);
     frame.render_widget(top_menu_tabs, chunks[0]);
 }
-fn render_packs(app: &mut App, frame: &mut Frame) {
-    let chunks = build_chunks(frame);
-    let top_menu_tabs = build_top_menu(&app);
-    frame.render_widget(top_menu_tabs, chunks[0]);
 
-    let (title, pack_name, vertical_scroll, pack_info_lines) = match app.packs.get_pack_list().selected_pack() {
-        Some(pack) => {
-            match app.menu_context.active_context_menu_item {
-                ContextMenuItem::Info(scroll) => {
-                    let info = app.packs.pack_info(&pack);
-                    let info_lines = info.into_iter().map(|line_str| {
-                        Line::from(line_str)
-                    }).collect::<Vec<Line>>();
-                    (String::from("info"), pack.name.clone(), scroll, info_lines)
-                },
-                ContextMenuItem::Dependents(scroll) => {
-                    let dependents = app.packs.pack_dependents(&pack);
-                    let dependent_lines = dependents.into_iter().map(|line_str| {
-                        Line::from(line_str)
-                    }).collect::<Vec<Line>>();
-                    (String::from("dependents"), pack.name.clone(), scroll, dependent_lines)
-                }
-            }
-        },
-        None => (String::from("nope"), "".to_string(), 0,vec![]),
-    };
+const DEPENDENT_PACK_VIOLATION_COUNT_HEADERS: [&str; 5] = [
+    "architecture",
+    "dependency",
+    "folder_visibility",
+    "privacy",
+    "visibility",
+];
 
+fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
+    let pack_name = app
+        .packs
+        .get_pack_list()
+        .selected_pack()
+        .unwrap_or_else(|| panic!("no pack selected"))
+        .name
+        .clone();
+    let selected_style = Style::default().add_modifier(Modifier::REVERSED);
+    let normal_style = Style::default().bg(Color::Blue);
+    let mut header_titles = vec!["pack"];
+    header_titles.extend(DEPENDENT_PACK_VIOLATION_COUNT_HEADERS.iter());
+    header_titles.push("total");
+    let header_cells = header_titles
+        .iter()
+        .map(|h| Cell::from(*h).style(Style::default().fg(Color::Red)));
+    let header = Row::new(header_cells)
+        .style(normal_style)
+        .height(1)
+        .bottom_margin(1);
+    let violations = app
+        .packs
+        .get_pack_dependent_violations_by_selected_defining_pack_name();
+    let scroll = app.menu_context.active_context_menu_item.scroll();
+    if scroll >= violations.len() && !violations.is_empty() {
+        app.menu_context.active_context_menu_item.set_scroll(violations.len() - 1);
+    }
+    let mut table_state = TableState::default().with_selected(Some(scroll));
+    let rows = violations.iter().map(|violation| {
+        let height = 1;
+        let mut cells = vec![];
+        cells.push(Cell::from(violation.referencing_pack_name.clone()));
+        for key in DEPENDENT_PACK_VIOLATION_COUNT_HEADERS {
+            let count = violation.violation_type_counts.get(key).unwrap_or(&0);
+            cells.push(Cell::from(count.to_string()));
+        }
+        let total = violation.violation_type_counts.values().sum::<usize>();
+        cells.push(Cell::from(total.to_string()));
+        Row::new(cells).height(height as u16)
+    });
+    let max_len: usize = violations
+        .iter()
+        .map(|violation| violation.referencing_pack_name.len())
+        .max()
+        .unwrap_or(0);
+    let mut widths = vec![Constraint::Length(max_len as u16)];
+    DEPENDENT_PACK_VIOLATION_COUNT_HEADERS
+        .iter()
+        .for_each(|h| widths.push(Constraint::Min(h.len() as u16)));
+    widths.push(Constraint::Length(5));
+    let footer = Row::new(vec![
+        Cell::from("totals"),
+        Cell::from(""),
+        Cell::from(""),
+        Cell::from(""),
+        Cell::from(""),
+        Cell::from(""),
+    ]);
+    let table = Table::new(rows, widths)
+        .header(header)
+        .footer(footer)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!("Violation Dependents ({})", violations.len()))
+                .title(Title::from(pack_name.clone()).alignment(Alignment::Right))
+        )
+        .highlight_style(selected_style)
+        .highlight_symbol(">> ");
+    frame.render_stateful_widget(table, rect, &mut table_state);
+
+    let mut scrollbar_state = ScrollbarState::default()
+        .content_length(violations.len())
+        .position(app.menu_context.active_context_menu_item.scroll());
+    let scrollbar = Scrollbar::default()
+        .orientation(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+
+    frame.render_stateful_widget(
+        scrollbar,
+        rect.inner(&Margin {
+            vertical: 1,
+            horizontal: 0,
+        }), // using a inner vertical margin of 1 unit makes the scrollbar inside the block
+        &mut scrollbar_state,
+    );
+}
+
+fn render_info_context(app: &mut App, frame: &mut Frame, rect: Rect) {
+    let pack = app
+        .packs
+        .get_pack_list()
+        .selected_pack()
+        .unwrap_or_else(|| panic!("no pack selected"));
+    let info = app.packs.pack_info(&pack);
+    let lines = info
+        .into_iter()
+        .map(Line::from)
+        .collect::<Vec<Line>>();
     let title_block = Block::new()
-        .title(Span::styled(title,
-                            Style::default()
-                                .add_modifier(Modifier::BOLD)))
-        .title(Title::from(pack_name).alignment(Alignment::Right))
+        .title(Span::styled(
+            "info",
+            Style::default().add_modifier(Modifier::BOLD),
+        ))
+        .title(Title::from(pack.name.clone()).alignment(Alignment::Right))
         .borders(Borders::ALL);
 
-    let content_length = pack_info_lines.len();
-    let mut scrollbar_state = ScrollbarState::new(content_length).position(vertical_scroll);
-    let paragraph = Paragraph::new(pack_info_lines)
-        .scroll((vertical_scroll as u16, 0))
+    let content_length = lines.len();
+    let mut scrollbar_state = ScrollbarState::new(content_length)
+        .position(app.menu_context.active_context_menu_item.scroll());
+    let paragraph = Paragraph::new(lines)
+        .scroll((app.menu_context.active_context_menu_item.scroll() as u16, 0))
         .block(title_block);
     let scrollbar = Scrollbar::default()
         .orientation(ScrollbarOrientation::VerticalRight)
         .begin_symbol(Some("↑"))
         .end_symbol(Some("↓"));
+
+    frame.render_widget(
+        paragraph,
+        rect,
+    );
+    frame.render_stateful_widget(
+        scrollbar,
+        rect.inner(&Margin {
+            vertical: 1,
+            horizontal: 0,
+        }), // using a inner vertical margin of 1 unit makes the scrollbar inside the block
+        &mut scrollbar_state,
+    );
+}
+
+fn render_no_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
+    let pack = app
+        .packs
+        .get_pack_list()
+        .selected_pack()
+        .unwrap_or_else(|| panic!("no pack selected"));
+    let dependents = app.packs.pack_dependents(&pack);
+    let lines = dependents
+        .into_iter()
+        .map(Line::from)
+        .collect::<Vec<Line>>();
+    let title_block = Block::new()
+        .title(Span::styled(
+            format!("dependents ({})", lines.len()),
+            Style::default().add_modifier(Modifier::BOLD),
+        ))
+        .title(Title::from(pack.name.clone()).alignment(Alignment::Right))
+        .borders(Borders::ALL);
+
+    let content_length = lines.len();
+    let scroll = app.menu_context.active_context_menu_item.scroll();
+    let mut scrollbar_state = ScrollbarState::new(content_length).position(scroll);
+    let paragraph = Paragraph::new(lines)
+        .scroll((scroll as u16, 0))
+        .block(title_block);
+    let scrollbar = Scrollbar::default()
+        .orientation(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+    frame.render_widget(
+        paragraph,
+        rect,
+    );
+    frame.render_stateful_widget(
+        scrollbar,
+        rect.inner(&Margin {
+            vertical: 1,
+            horizontal: 0,
+        }), // using a inner vertical margin of 1 unit makes the scrollbar inside the block
+        &mut scrollbar_state,
+    );
+}
+
+fn render_packs(app: &mut App, frame: &mut Frame) {
+    let chunks = build_chunks(frame);
+    let top_menu_tabs = build_top_menu(app);
+    frame.render_widget(top_menu_tabs, chunks[0]);
+
+    let funny = match app.packs.get_pack_list().selected_pack() {
+        Some(_pack) => match app.menu_context.active_context_menu_item {
+            ContextMenuItem::Info(_scroll) => render_info_context,
+            ContextMenuItem::NoViolationDependents(_scroll) => render_no_violation_dependents,
+            ContextMenuItem::ViolationDependents(_scroll) => render_violation_dependents,
+        },
+        None => |_app: &mut App, _frame: &mut Frame, _rect: Rect|{},
+    };
 
     match app.menu_context.active_focus {
         ActiveFocus::Left => {
@@ -74,18 +230,7 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
                 .constraints(vec![Constraint::Percentage(33), Constraint::Percentage(67)])
                 .split(chunks[1]);
 
-            frame.render_widget(
-                paragraph,
-                outer_layout[1],
-            );
-            frame.render_stateful_widget(
-                scrollbar,
-                outer_layout[1].inner(&Margin {
-                    vertical: 1,
-                    horizontal: 0,
-                }), // using a inner vertical margin of 1 unit makes the scrollbar inside the block
-                &mut scrollbar_state,
-            );
+            funny(app, frame, outer_layout[1]);
 
             let pack_list = app.packs.get_pack_list();
 
@@ -104,27 +249,20 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
                         .add_modifier(Modifier::BOLD),
                 );
             frame.render_stateful_widget(items, outer_layout[0], &mut pack_list.state);
-        },
+        }
         ActiveFocus::Right => {
-            frame.render_widget(
-                paragraph,
-                chunks[1],
-            );
-            frame.render_stateful_widget(
-                scrollbar,
-                chunks[1].inner(&Margin {
-                    vertical: 1,
-                    horizontal: 0,
-                }), // using a inner vertical margin of 1 unit makes the scrollbar inside the block
-                &mut scrollbar_state,
-            );
-        },
+            funny(app, frame, chunks[1]);
+        }
     }
 
-    let menu_titles = vec!["Info".to_string(), "Dependents".to_string()];
-    match build_context_menu(&app, &menu_titles) {
-        Some(context_menu_tabs) => frame.render_widget(context_menu_tabs, chunks[2]),
-        None => {}
+    let menu_titles = vec![
+        "Info".to_string(),
+        "Dependents".to_string(),
+        "Violation Dependents".to_string(),
+    ];
+
+    if let Some(context_menu_tabs) = build_context_menu(app, &menu_titles) {
+        frame.render_widget(context_menu_tabs, chunks[2])
     }
 }
 
@@ -138,14 +276,14 @@ fn build_chunks(frame: &mut Frame) -> Rc<[Rect]> {
                 Constraint::Min(2),
                 Constraint::Length(3),
             ]
-                .as_ref(),
+            .as_ref(),
         )
         .split(frame.size());
     chunks
 }
 
 fn build_top_menu(app: &App) -> Tabs {
-    let menu_titles = vec!["Summary", "Actions", "Packs"];
+    let menu_titles = ["Summary", "Actions", "Packs"];
     let menu = menu_titles
         .iter()
         .map(|t| {
@@ -170,7 +308,7 @@ fn build_top_menu(app: &App) -> Tabs {
     tabs
 }
 
-fn build_context_menu<'a>(app: &App, menu_titles: &'a Vec<String>) -> Option<Tabs<'a>> {
+fn build_context_menu<'a>(app: &App, menu_titles: &'a [String]) -> Option<Tabs<'a>> {
     let menu: Vec<Line> = menu_titles
         .iter()
         .map(|t| {
@@ -179,7 +317,7 @@ fn build_context_menu<'a>(app: &App, menu_titles: &'a Vec<String>) -> Option<Tab
                 Span::styled(
                     first,
                     Style::default()
-                        .fg(Color::Blue)
+                        .fg(Color::LightCyan)
                         .add_modifier(Modifier::UNDERLINED),
                 ),
                 Span::styled(rest, Style::default().fg(Color::White)),
@@ -190,7 +328,7 @@ fn build_context_menu<'a>(app: &App, menu_titles: &'a Vec<String>) -> Option<Tab
         .select(app.menu_context.active_context_menu_item.into())
         .block(Block::default().borders(Borders::ALL))
         .style(Style::default().fg(Color::White))
-        .highlight_style(Style::default().fg(Color::LightBlue))
+        .highlight_style(Style::default().bg(Color::Cyan))
         .divider(Span::raw("|"));
     Some(tabs)
 }

@@ -1,7 +1,7 @@
-use std::collections::{BTreeSet, HashMap};
-use ratatui::widgets::ListState;
-use packs::packs::pack::Pack;
 use packs::packs::configuration::Configuration;
+use packs::packs::pack::Pack;
+use ratatui::widgets::{ListState};
+use std::collections::{BTreeSet, HashMap};
 
 pub struct Packs {
     pub configuration: Configuration,
@@ -10,6 +10,14 @@ pub struct Packs {
     pub packs: Option<Vec<Pack>>,
     pub pack_list: Option<PackList>,
     pub pack_dependents: Option<HashMap<String, BTreeSet<String>>>,
+    pub pack_dependent_violations: Option<Vec<PackDependentViolation>>,
+}
+
+pub struct PackDependentViolation {
+    pub defining_pack_name: String,
+    pub referencing_pack_name: String,
+    pub violation_type_counts: HashMap<String, usize>,
+    pub constant_counts: HashMap<String, usize>,
 }
 
 impl Default for Packs {
@@ -22,6 +30,7 @@ impl Default for Packs {
             packs: None,
             pack_list: None,
             pack_dependents: None,
+            pack_dependent_violations: None,
         }
     }
 }
@@ -48,20 +57,75 @@ impl Packs {
     pub fn get_pack_dependents(&mut self) -> HashMap<String, BTreeSet<String>> {
         self.check_stale();
         if self.pack_dependents.is_none() {
-            let pack_dependents = self.configuration.pack_set.packs.iter().fold(
-                HashMap::new(),
-                |mut map, pack| {
-                    map.entry(pack.name.clone()).or_default(); // handles standalone packs
-                    for dep_pack in pack.dependencies.iter() {
-                        let entry: &mut BTreeSet<String> = map.entry(dep_pack.clone()).or_default();
-                        entry.insert(pack.name.clone());
-                    }
-                    map
-                },
-            );
+            let pack_dependents =
+                self.configuration
+                    .pack_set
+                    .packs
+                    .iter()
+                    .fold(HashMap::new(), |mut map, pack| {
+                        map.entry(pack.name.clone()).or_default(); // handles standalone packs
+                        for dep_pack in pack.dependencies.iter() {
+                            let entry: &mut BTreeSet<String> =
+                                map.entry(dep_pack.clone()).or_default();
+                            entry.insert(pack.name.clone());
+                        }
+                        map
+                    });
             self.pack_dependents = Some(pack_dependents);
         }
         self.pack_dependents.as_ref().unwrap().clone()
+    }
+
+    pub fn get_pack_dependent_violations_by_selected_defining_pack_name(
+        &mut self,
+    ) -> Vec<&PackDependentViolation> {
+        let defining_pack_name = match self.get_pack_list().selected_pack() {
+            Some(pack) => pack.name.clone(),
+            None => return vec![],
+        };
+        let pack_dependent_violations = self.get_pack_dependent_violations();
+        let mut dependents: Vec<&PackDependentViolation> = pack_dependent_violations
+            .iter()
+            .filter(|violation| violation.defining_pack_name == defining_pack_name)
+            .collect();
+        dependents.sort_by(|a, b| a.referencing_pack_name.cmp(&b.referencing_pack_name));
+        dependents
+    }
+
+    pub fn get_pack_dependent_violations(&mut self) -> &mut Vec<PackDependentViolation> {
+        self.check_stale();
+        if self.pack_dependent_violations.is_none() {
+            let mut dependent_map: HashMap<(String, String), PackDependentViolation> =
+                self.configuration.pack_set.all_violations.iter().fold(
+                    HashMap::new(),
+                    |mut map, violation| {
+                        let defining_pack_name = violation.defining_pack_name.clone();
+                        let referencing_pack_name = violation.referencing_pack_name.clone();
+                        let key = (defining_pack_name.clone(), referencing_pack_name.clone());
+                        let entry = map.entry(key).or_insert(PackDependentViolation {
+                            defining_pack_name,
+                            referencing_pack_name,
+                            violation_type_counts: HashMap::new(),
+                            constant_counts: HashMap::new(),
+                        });
+                        entry
+                            .violation_type_counts
+                            .entry(violation.violation_type.clone())
+                            .and_modify(|count| *count += 1)
+                            .or_insert(1);
+                        entry
+                            .constant_counts
+                            .entry(violation.constant_name.clone())
+                            .and_modify(|count| *count += 1)
+                            .or_insert(1);
+                        map
+                    },
+                );
+            let pack_dependent_violations: Vec<PackDependentViolation> =
+                dependent_map.drain().map(|(_, v)| v).collect();
+            self.pack_dependent_violations = Some(pack_dependent_violations);
+        }
+        self.pack_dependent_violations.as_mut().unwrap()
     }
 
     pub fn check_stale(&mut self) {
@@ -75,35 +139,31 @@ impl Packs {
 
     pub fn pack_info(&self, pack: &Pack) -> Vec<String> {
         let serialized = packs::packs::pack::serialize_pack(pack);
-        serialized.split("\n").map(|s| s.to_string()).collect()
+        serialized.split('\n').map(|s| s.to_string()).collect()
     }
 
     pub fn pack_dependents(&mut self, pack: &Pack) -> BTreeSet<String> {
-        match self.get_pack_dependents()
-            .get(&pack.name) {
+        match self.get_pack_dependents().get(&pack.name) {
             Some(dependents) => dependents.clone(),
             None => BTreeSet::new(),
         }
     }
 
     pub fn next_pack_list(&mut self) {
-        match self.pack_list {
-            Some(ref mut pack_list) => pack_list.next(),
-            None => (),
+        if let Some(ref mut pack_list) = self.pack_list {
+            pack_list.next()
         }
     }
 
     pub fn previous_pack_list(&mut self) {
-        match self.pack_list {
-            Some(ref mut pack_list) => pack_list.previous(),
-            None => (),
+        if let Some(ref mut pack_list) = self.pack_list {
+            pack_list.previous()
         }
     }
 
     pub fn unselect_pack_list(&mut self) {
-        match self.pack_list {
-            Some(ref mut pack_list) => pack_list.unselect(),
-            None => (),
+        if let Some(ref mut pack_list) = self.pack_list {
+            pack_list.unselect()
         }
     }
 }
@@ -122,10 +182,7 @@ impl PackList {
     }
 
     pub fn selected_pack(&self) -> Option<Pack> {
-        match self.state.selected() {
-            Some(i) => Some(self.items[i].clone()),
-            None => None,
-        }
+        self.state.selected().map(|i| self.items[i].clone())
     }
 
     pub fn next(&mut self) {
