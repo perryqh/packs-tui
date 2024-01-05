@@ -15,13 +15,15 @@ pub struct App {
 pub struct MenuContext {
     pub active_menu_item: MenuItem,
     pub active_context_menu_item: ContextMenuItem,
+    pub active_focus: ActiveFocus,
 }
 
 impl Default for MenuContext {
     fn default() -> Self {
         Self {
             active_menu_item: MenuItem::Summary,
-            active_context_menu_item: ContextMenuItem::Info,
+            active_context_menu_item: ContextMenuItem::Info(0),
+            active_focus: ActiveFocus::Left,
         }
     }
 }
@@ -55,11 +57,27 @@ impl App {
     }
 
     pub fn next(&mut self) {
-        self.packs.next_pack_list();
+        match self.menu_context.active_focus {
+            ActiveFocus::Left => {
+                self.menu_context.active_context_menu_item.reset_scroll();
+                self.packs.next_pack_list();
+            },
+            ActiveFocus::Right => {
+                self.menu_context.active_context_menu_item.next_scroll();
+            },
+        }
     }
 
     pub fn previous(&mut self) {
-        self.packs.previous_pack_list();
+        match self.menu_context.active_focus {
+            ActiveFocus::Left => {
+                self.menu_context.active_context_menu_item.reset_scroll();
+                self.packs.previous_pack_list();
+            },
+            ActiveFocus::Right => {
+                self.menu_context.active_context_menu_item.previous_scroll();
+            },
+        }
     }
 
     pub fn handle_tab(&mut self) {
@@ -83,11 +101,19 @@ impl App {
     }
 
     pub fn handle_context_menu_d(&mut self) {
-        self.menu_context.active_context_menu_item = ContextMenuItem::Dependents;
+        self.menu_context.active_context_menu_item = ContextMenuItem::Dependents(0);
     }
 
     pub fn handle_context_menu_i(&mut self) {
-        self.menu_context.active_context_menu_item = ContextMenuItem::Info;
+        self.menu_context.active_context_menu_item = ContextMenuItem::Info(0);
+    }
+
+    pub fn focus_left(&mut self) {
+        self.menu_context.active_focus = ActiveFocus::Left;
+    }
+
+    pub fn focus_right(&mut self) {
+        self.menu_context.active_focus = ActiveFocus::Right;
     }
 }
 
@@ -108,17 +134,60 @@ impl From<MenuItem> for usize {
     }
 }
 
+pub enum ActiveFocus {
+    Left,
+    Right,
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum ContextMenuItem {
-    Info,
-    Dependents,
+    Info(usize),
+    Dependents(usize),
+}
+
+impl ContextMenuItem {
+    pub fn scroll(&self) -> usize {
+        match self {
+            ContextMenuItem::Info(scroll) => *scroll,
+            ContextMenuItem::Dependents(scroll) => *scroll,
+        }
+    }
+
+    pub fn reset_scroll(&mut self) {
+        match self {
+            ContextMenuItem::Info(scroll) => *scroll = 0,
+            ContextMenuItem::Dependents(scroll) => *scroll = 0,
+        }
+    }
+
+    pub fn next_scroll(&mut self) {
+        match self {
+            ContextMenuItem::Info(scroll) => *scroll += 1,
+            ContextMenuItem::Dependents(scroll) => *scroll += 1,
+        }
+    }
+
+    pub fn previous_scroll(&mut self) {
+        match self {
+            ContextMenuItem::Info(scroll) => {
+                if *scroll > 0 {
+                    *scroll -= 1;
+                }
+            },
+            ContextMenuItem::Dependents(scroll) => {
+                if *scroll > 0 {
+                    *scroll -= 1;
+                }
+            },
+        }
+    }
 }
 
 impl From<ContextMenuItem> for usize {
     fn from(input: ContextMenuItem) -> usize {
         match input {
-            ContextMenuItem::Info => 0,
-            ContextMenuItem::Dependents => 1,
+            ContextMenuItem::Info(_scroll) => 0,
+            ContextMenuItem::Dependents(_scroll) => 1,
         }
     }
 }

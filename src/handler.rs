@@ -22,7 +22,8 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
         KeyCode::Char('a') => app.handle_top_menu_a(),
 
         // Counter handlers
-        KeyCode::Left | KeyCode::Char('h') => app.unselect(),
+        KeyCode::Left | KeyCode::Char('h') => app.focus_left(),
+        KeyCode::Right | KeyCode::Char('l') => app.focus_right(),
         KeyCode::Down | KeyCode::Char('j') => app.next(),
         KeyCode::Up | KeyCode::Char('k') => app.previous(),
 

@@ -1,7 +1,8 @@
 use std::rc::Rc;
 use ratatui::{prelude::*, widgets::*};
+use ratatui::widgets::block::{Title};
 
-use crate::app::{App, ContextMenuItem, MenuItem};
+use crate::app::{ActiveFocus, App, ContextMenuItem, MenuItem};
 
 /// Renders the user interface widgets.
 pub fn render(app: &mut App, frame: &mut Frame) {
@@ -27,46 +28,69 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
     let top_menu_tabs = build_top_menu(&app);
     frame.render_widget(top_menu_tabs, chunks[0]);
 
-    let outer_layout = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints(vec![Constraint::Percentage(33), Constraint::Percentage(67)])
-        .split(chunks[1]);
-
-    let pack_info = match app.packs.get_pack_list().selected_pack() {
+    let (title, pack_name, vertical_scroll, pack_info) = match app.packs.get_pack_list().selected_pack() {
         Some(pack) => {
             match app.menu_context.active_context_menu_item {
-                ContextMenuItem::Info => app.packs.pack_info(&pack),
-                ContextMenuItem::Dependents => {
+                ContextMenuItem::Info(scroll) => {
+                    (String::from("info"), pack.name.clone(), scroll, app.packs.pack_info(&pack))
+                },
+                ContextMenuItem::Dependents(scroll) => {
                     let dependents = app.packs.pack_dependents(&pack);
-                    format!("{:?}", dependents)
+                    (String::from("dependents"), pack.name.clone(), scroll, format!("{:?}", dependents))
                 }
             }
         },
-        None => "".to_string(),
+        None => (String::from("nope"), "".to_string(), 0,"".to_string()),
     };
 
-    frame.render_widget(
-        Paragraph::new(pack_info.as_str()).block(Block::new().borders(Borders::ALL)),
-        outer_layout[1],
-    );
+    let title_block = Block::new()
+        .title(Span::styled(title,
+                            Style::default()
+                                .add_modifier(Modifier::BOLD)))
+        .title(Title::from(pack_name).alignment(Alignment::Right))
+        .borders(Borders::ALL);
 
-    let pack_list = app.packs.get_pack_list();
+    match app.menu_context.active_focus {
+        ActiveFocus::Left => {
+            let outer_layout = Layout::default()
+                .direction(Direction::Horizontal)
+                .constraints(vec![Constraint::Percentage(33), Constraint::Percentage(67)])
+                .split(chunks[1]);
 
-    let list_items: Vec<ListItem> = pack_list
-        .items
-        .iter()
-        .map(|pack| ListItem::new(pack.name.clone()))
-        .collect();
+            frame.render_widget(
+                Paragraph::new(pack_info.as_str())
+                    .scroll((vertical_scroll as u16, 0))
+                    .block(title_block),
+                outer_layout[1],
+            );
 
-    let items = List::new(list_items)
-        .block(Block::default().borders(Borders::ALL).title("packs"))
-        .highlight_style(
-            Style::default()
-                .bg(Color::LightGreen)
-                .fg(Color::Black)
-                .add_modifier(Modifier::BOLD),
-        );
-    frame.render_stateful_widget(items, outer_layout[0], &mut pack_list.state);
+            let pack_list = app.packs.get_pack_list();
+
+            let list_items: Vec<ListItem> = pack_list
+                .items
+                .iter()
+                .map(|pack| ListItem::new(pack.name.clone()))
+                .collect();
+
+            let items = List::new(list_items)
+                .block(Block::default().borders(Borders::ALL).title("packs"))
+                .highlight_style(
+                    Style::default()
+                        .bg(Color::LightGreen)
+                        .fg(Color::Black)
+                        .add_modifier(Modifier::BOLD),
+                );
+            frame.render_stateful_widget(items, outer_layout[0], &mut pack_list.state);
+        },
+        ActiveFocus::Right => {
+            frame.render_widget(
+                Paragraph::new(pack_info.as_str())
+                    .scroll((vertical_scroll as u16, 0))
+                    .block(title_block),
+                chunks[1],
+            );
+        },
+    }
 
     let menu_titles = vec!["Info".to_string(), "Dependents".to_string()];
     match build_context_menu(&app, &menu_titles) {
