@@ -28,19 +28,26 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
     let top_menu_tabs = build_top_menu(&app);
     frame.render_widget(top_menu_tabs, chunks[0]);
 
-    let (title, pack_name, vertical_scroll, pack_info) = match app.packs.get_pack_list().selected_pack() {
+    let (title, pack_name, vertical_scroll, pack_info_lines) = match app.packs.get_pack_list().selected_pack() {
         Some(pack) => {
             match app.menu_context.active_context_menu_item {
                 ContextMenuItem::Info(scroll) => {
-                    (String::from("info"), pack.name.clone(), scroll, app.packs.pack_info(&pack))
+                    let info = app.packs.pack_info(&pack);
+                    let info_lines = info.into_iter().map(|line_str| {
+                        Line::from(line_str)
+                    }).collect::<Vec<Line>>();
+                    (String::from("info"), pack.name.clone(), scroll, info_lines)
                 },
                 ContextMenuItem::Dependents(scroll) => {
                     let dependents = app.packs.pack_dependents(&pack);
-                    (String::from("dependents"), pack.name.clone(), scroll, format!("{:?}", dependents))
+                    let dependent_lines = dependents.into_iter().map(|line_str| {
+                        Line::from(line_str)
+                    }).collect::<Vec<Line>>();
+                    (String::from("dependents"), pack.name.clone(), scroll, dependent_lines)
                 }
             }
         },
-        None => (String::from("nope"), "".to_string(), 0,"".to_string()),
+        None => (String::from("nope"), "".to_string(), 0,vec![]),
     };
 
     let title_block = Block::new()
@@ -50,6 +57,16 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
         .title(Title::from(pack_name).alignment(Alignment::Right))
         .borders(Borders::ALL);
 
+    let content_length = pack_info_lines.len();
+    let mut scrollbar_state = ScrollbarState::new(content_length).position(vertical_scroll);
+    let paragraph = Paragraph::new(pack_info_lines)
+        .scroll((vertical_scroll as u16, 0))
+        .block(title_block);
+    let scrollbar = Scrollbar::default()
+        .orientation(ScrollbarOrientation::VerticalRight)
+        .begin_symbol(Some("↑"))
+        .end_symbol(Some("↓"));
+
     match app.menu_context.active_focus {
         ActiveFocus::Left => {
             let outer_layout = Layout::default()
@@ -58,10 +75,16 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
                 .split(chunks[1]);
 
             frame.render_widget(
-                Paragraph::new(pack_info.as_str())
-                    .scroll((vertical_scroll as u16, 0))
-                    .block(title_block),
+                paragraph,
                 outer_layout[1],
+            );
+            frame.render_stateful_widget(
+                scrollbar,
+                outer_layout[1].inner(&Margin {
+                    vertical: 1,
+                    horizontal: 0,
+                }), // using a inner vertical margin of 1 unit makes the scrollbar inside the block
+                &mut scrollbar_state,
             );
 
             let pack_list = app.packs.get_pack_list();
@@ -84,10 +107,16 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
         },
         ActiveFocus::Right => {
             frame.render_widget(
-                Paragraph::new(pack_info.as_str())
-                    .scroll((vertical_scroll as u16, 0))
-                    .block(title_block),
+                paragraph,
                 chunks[1],
+            );
+            frame.render_stateful_widget(
+                scrollbar,
+                chunks[1].inner(&Margin {
+                    vertical: 1,
+                    horizontal: 0,
+                }), // using a inner vertical margin of 1 unit makes the scrollbar inside the block
+                &mut scrollbar_state,
             );
         },
     }

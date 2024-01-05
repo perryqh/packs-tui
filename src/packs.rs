@@ -73,8 +73,9 @@ impl Packs {
         // }
     }
 
-    pub fn pack_info(&self, pack: &Pack) -> String{
-        packs::packs::pack::serialize_pack(pack)
+    pub fn pack_info(&self, pack: &Pack) -> Vec<String> {
+        let serialized = packs::packs::pack::serialize_pack(pack);
+        serialized.split("\n").map(|s| s.to_string()).collect()
     }
 
     pub fn pack_dependents(&mut self, pack: &Pack) -> BTreeSet<String> {
