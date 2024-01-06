@@ -171,6 +171,7 @@ impl Packs {
 pub struct PackList {
     pub state: ListState,
     pub items: Vec<Pack>,
+    pub filter: String,
 }
 
 impl PackList {
@@ -178,6 +179,7 @@ impl PackList {
         PackList {
             state: ListState::default(),
             items,
+            filter: String::default(),
         }
     }
 

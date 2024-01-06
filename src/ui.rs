@@ -3,6 +3,7 @@ use ratatui::{prelude::*, widgets::*};
 use std::rc::Rc;
 
 use crate::app::{ActiveFocus, App, ContextMenuItem, MenuItem};
+use tui_textarea::{Input, Key, TextArea};
 
 /// Renders the user interface widgets.
 pub fn render(app: &mut App, frame: &mut Frame) {
@@ -42,17 +43,15 @@ fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
         .name
         .clone();
     let selected_style = Style::default().add_modifier(Modifier::REVERSED);
-    let normal_style = Style::default().bg(Color::Blue);
     let mut header_titles = vec!["pack"];
     header_titles.extend(DEPENDENT_PACK_VIOLATION_COUNT_HEADERS.iter());
     header_titles.push("total");
     let header_cells = header_titles
         .iter()
-        .map(|h| Cell::from(*h).style(Style::default().fg(Color::Red)));
+        .map(|h| Cell::from(*h).style(Style::default().fg(Color::LightCyan)));
     let header = Row::new(header_cells)
-        .style(normal_style)
-        .height(1)
-        .bottom_margin(1);
+        .bold()
+        .height(1);
     let violations = app
         .packs
         .get_pack_dependent_violations_by_selected_defining_pack_name();
@@ -83,17 +82,8 @@ fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
         .iter()
         .for_each(|h| widths.push(Constraint::Min(h.len() as u16)));
     widths.push(Constraint::Length(5));
-    let footer = Row::new(vec![
-        Cell::from("totals"),
-        Cell::from(""),
-        Cell::from(""),
-        Cell::from(""),
-        Cell::from(""),
-        Cell::from(""),
-    ]);
     let table = Table::new(rows, widths)
         .header(header)
-        .footer(footer)
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -232,23 +222,7 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
 
             funny(app, frame, outer_layout[1]);
 
-            let pack_list = app.packs.get_pack_list();
-
-            let list_items: Vec<ListItem> = pack_list
-                .items
-                .iter()
-                .map(|pack| ListItem::new(pack.name.clone()))
-                .collect();
-
-            let items = List::new(list_items)
-                .block(Block::default().borders(Borders::ALL).title("packs"))
-                .highlight_style(
-                    Style::default()
-                        .bg(Color::LightGreen)
-                        .fg(Color::Black)
-                        .add_modifier(Modifier::BOLD),
-                );
-            frame.render_stateful_widget(items, outer_layout[0], &mut pack_list.state);
+            render_pack_list(app, frame, outer_layout[0]);
         }
         ActiveFocus::Right => {
             funny(app, frame, chunks[1]);
@@ -264,6 +238,48 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
     if let Some(context_menu_tabs) = build_context_menu(app, &menu_titles) {
         frame.render_widget(context_menu_tabs, chunks[2])
     }
+}
+
+fn render_pack_list(app: &mut App, frame: &mut Frame, outer_layout: Rect) {
+    let title_block = Block::default()
+        .title(format!("packs ({})", app.packs.get_pack_list().items.len()))
+        .borders(Borders::ALL);
+    frame.render_widget(title_block, outer_layout);
+
+    let inner_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![
+            // Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Percentage(75),
+        ])
+        .margin(1)
+        .split(outer_layout);
+
+    // https://github.com/rhysd/tui-textarea/blob/main/examples/single_line.rs
+    let mut textarea = TextArea::default();
+    textarea.set_cursor_line_style(Style::default());
+    textarea.set_placeholder_text("Filter packs by name");
+    let widget = textarea.widget();
+    frame.render_widget(widget, inner_layout[0]);
+
+    let pack_list = app.packs.get_pack_list();
+
+    let list_items: Vec<ListItem> = pack_list
+        .items
+        .iter()
+        .map(|pack| ListItem::new(pack.name.clone()))
+        .collect();
+
+    let items = List::new(list_items)
+        // .block(Block::default().borders(Borders::ALL).title("packs"))
+        .highlight_style(
+            Style::default()
+                .bg(Color::LightGreen)
+                .fg(Color::Black)
+                .add_modifier(Modifier::BOLD),
+        );
+    frame.render_stateful_widget(items, inner_layout[1], &mut pack_list.state);
 }
 
 fn build_chunks(frame: &mut Frame) -> Rc<[Rect]> {
@@ -328,7 +344,7 @@ fn build_context_menu<'a>(app: &App, menu_titles: &'a [String]) -> Option<Tabs<'
         .select(app.menu_context.active_context_menu_item.into())
         .block(Block::default().borders(Borders::ALL))
         .style(Style::default().fg(Color::White))
-        .highlight_style(Style::default().bg(Color::Cyan))
+        .highlight_style(Style::default().bg(Color::Gray).fg(Color::Black))
         .divider(Span::raw("|"));
     Some(tabs)
 }
