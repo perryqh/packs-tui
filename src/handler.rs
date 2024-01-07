@@ -1,31 +1,49 @@
-use crate::app::{App, AppResult};
+use crate::app::{ActiveFocus, App, AppResult};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Handles the key events and updates the state of [`App`].
 pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
     match key_event.code {
-        // Exit application on `ESC` or `q`
-        KeyCode::Char('q') => {
-            app.quit();
-        }
-        // Exit application on `Ctrl-C`
         KeyCode::Char('c') | KeyCode::Char('C') => {
             if key_event.modifiers == KeyModifiers::CONTROL {
                 app.quit();
             }
         }
+        KeyCode::Tab => {
+            app.handle_tab();
+            return Ok(());
+        },
+        KeyCode::Esc => {
+            app.focus_left();
+            return Ok(());
+        },
+        KeyCode::Down | KeyCode::Char('j') => {
+            app.next();
+            return Ok(());
+        },
+        _ => {}
+    }
+    if let ActiveFocus::FilterPacks(ref mut textarea) = app.menu_context.active_focus {
+        textarea.input(key_event);
+        if let Some(ref mut pack_list) = app.packs.pack_list {
+            pack_list.filter = textarea.lines().join("");
+        }
+        return Ok(());
+    }
+    match key_event.code {
+        // Exit application on `ESC` or `q`
+        KeyCode::Char('q') => {
+            app.quit();
+        }
 
         // Top Menu handlers
-        KeyCode::Tab => app.handle_tab(),
         KeyCode::Char('s') => app.handle_top_menu_s(),
         KeyCode::Char('p') => app.handle_top_menu_p(),
         KeyCode::Char('a') => app.handle_top_menu_a(),
 
-        KeyCode::Esc => app.focus_left(),
         KeyCode::Right => app.focus_right(),
-        // KeyCode::Left | KeyCode::Char('h') => app.focus_left(),
-        // KeyCode::Right | KeyCode::Char('l') => app.focus_right(),
-        KeyCode::Down | KeyCode::Char('j') => app.next(),
+        KeyCode::Char('f') => app.focus_filter_packs(),
+
         KeyCode::Up | KeyCode::Char('k') => app.previous(),
 
         // Content menu handlers

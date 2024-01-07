@@ -3,7 +3,6 @@ use ratatui::{prelude::*, widgets::*};
 use std::rc::Rc;
 
 use crate::app::{ActiveFocus, App, ContextMenuItem, MenuItem};
-use tui_textarea::{Input, Key, TextArea};
 
 /// Renders the user interface widgets.
 pub fn render(app: &mut App, frame: &mut Frame) {
@@ -43,9 +42,9 @@ fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
         .name
         .clone();
     let selected_style = Style::default().add_modifier(Modifier::REVERSED);
-    let mut header_titles = vec!["pack"];
-    header_titles.extend(DEPENDENT_PACK_VIOLATION_COUNT_HEADERS.iter());
-    header_titles.push("total");
+    let header_titles = ["pack", "arch", "dep", "fvis", "priv", "vis", "total"];
+    // header_titles.extend(DEPENDENT_PACK_VIOLATION_COUNT_HEADERS.iter());
+    // header_titles.push("total");
     let header_cells = header_titles
         .iter()
         .map(|h| Cell::from(*h).style(Style::default().fg(Color::LightCyan)));
@@ -214,7 +213,7 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
     };
 
     match app.menu_context.active_focus {
-        ActiveFocus::Left => {
+        ActiveFocus::Left | ActiveFocus::FilterPacks(_) => {
             let outer_layout = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints(vec![Constraint::Percentage(33), Constraint::Percentage(67)])
@@ -241,51 +240,75 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
 }
 
 fn render_pack_list(app: &mut App, frame: &mut Frame, outer_layout: Rect) {
+    let filtered_packs = app.packs.get_pack_list().filtered_items();
+
     let title_block = Block::default()
-        .title(format!("packs ({})", app.packs.get_pack_list().items.len()))
+        .title(format!("packs ({})", filtered_packs.len()))
         .borders(Borders::ALL);
     frame.render_widget(title_block, outer_layout);
 
     let inner_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints(vec![
-            // Constraint::Length(1),
-            Constraint::Length(1),
+            Constraint::Length(2),
             Constraint::Percentage(75),
         ])
         .margin(1)
         .split(outer_layout);
 
-    // https://github.com/rhysd/tui-textarea/blob/main/examples/single_line.rs
-    let mut textarea = TextArea::default();
-    textarea.set_cursor_line_style(Style::default());
-    textarea.set_placeholder_text("Filter packs by name");
-    let widget = textarea.widget();
-    frame.render_widget(widget, inner_layout[0]);
+    let filter_title_block = Block::default()
+        .borders(Borders::BOTTOM);
+    frame.render_widget(filter_title_block, inner_layout[0]);
 
-    let pack_list = app.packs.get_pack_list();
+    match app.menu_context.active_focus {
+        ActiveFocus::FilterPacks(ref mut textarea) => {
+            textarea.set_cursor_line_style(Style::default());
+            textarea.set_placeholder_text("Filter by pack name");
+            let widget = textarea.widget();
+            frame.render_widget(widget, inner_layout[0]);
+        }
+        _ => {
+            if let Some(ref mut pack_list) = app.packs.pack_list {
+                let mut existing_filter = pack_list.filter.clone();
+                if existing_filter.is_empty() {
+                    existing_filter = "ctrl-f".to_string();
+                }
+                let line = Line::from(vec![
+                    Span::styled(
+                        "Filter: ",
+                        Style::default()
+                            .fg(Color::Gray)
+                    ),
+                    Span::styled(existing_filter, Style::default().fg(Color::White).bold()),
+                ]);
 
-    let list_items: Vec<ListItem> = pack_list
-        .items
+                let paragraph = Paragraph::new(line)
+                    // .style(Style::new().white().on_light_magenta())
+                    .alignment(Alignment::Left);
+                frame.render_widget(paragraph, inner_layout[0]);
+            }
+        }
+    }
+
+    let list_items: Vec<ListItem> = filtered_packs
         .iter()
         .map(|pack| ListItem::new(pack.name.clone()))
         .collect();
 
     let items = List::new(list_items)
-        // .block(Block::default().borders(Borders::ALL).title("packs"))
         .highlight_style(
             Style::default()
                 .bg(Color::LightGreen)
                 .fg(Color::Black)
                 .add_modifier(Modifier::BOLD),
         );
+    let pack_list = app.packs.get_pack_list();
     frame.render_stateful_widget(items, inner_layout[1], &mut pack_list.state);
 }
 
 fn build_chunks(frame: &mut Frame) -> Rc<[Rect]> {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .margin(2)
         .constraints(
             [
                 Constraint::Length(3),
@@ -298,7 +321,7 @@ fn build_chunks(frame: &mut Frame) -> Rc<[Rect]> {
     chunks
 }
 
-fn build_top_menu(app: &App) -> Tabs {
+fn build_top_menu<'a>(app: &'a App<'a>) -> Tabs<'a> {
     let menu_titles = ["Summary", "Actions", "Packs"];
     let menu = menu_titles
         .iter()

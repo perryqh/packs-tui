@@ -1,24 +1,25 @@
 use crate::packs::Packs;
 use anyhow::Result;
+use tui_textarea::TextArea;
 
 /// Application result type.
 pub type AppResult<T> = Result<T>;
 
 /// Application.
-pub struct App {
+pub struct App<'a> {
     /// Is the application running?
     pub running: bool,
     pub packs: Packs,
-    pub menu_context: MenuContext,
+    pub menu_context: MenuContext<'a>,
 }
 
-pub struct MenuContext {
+pub struct MenuContext<'a> {
     pub active_menu_item: MenuItem,
     pub active_context_menu_item: ContextMenuItem,
-    pub active_focus: ActiveFocus,
+    pub active_focus: ActiveFocus<'a>,
 }
 
-impl Default for MenuContext {
+impl Default for MenuContext<'_> {
     fn default() -> Self {
         Self {
             active_menu_item: MenuItem::Summary,
@@ -28,7 +29,7 @@ impl Default for MenuContext {
     }
 }
 
-impl Default for App {
+impl Default for App<'_> {
     fn default() -> Self {
         Self {
             running: true,
@@ -38,7 +39,7 @@ impl Default for App {
     }
 }
 
-impl App {
+impl App<'_> {
     /// Constructs a new instance of [`App`].
     pub fn new() -> Self {
         Self::default()
@@ -57,13 +58,20 @@ impl App {
     }
 
     pub fn next(&mut self) {
-        match self.menu_context.active_focus {
-            ActiveFocus::Left => {
-                self.menu_context.active_context_menu_item.reset_scroll();
-                self.packs.next_pack_list();
-            }
-            ActiveFocus::Right => {
-                self.menu_context.active_context_menu_item.next_scroll();
+        if let ActiveFocus::FilterPacks(_) = self.menu_context.active_focus {
+            self.menu_context.active_focus = ActiveFocus::Left;
+        } else {
+            match self.menu_context.active_focus {
+                ActiveFocus::Left => {
+                    self.menu_context.active_context_menu_item.reset_scroll();
+                    self.packs.next_pack_list();
+                }
+                ActiveFocus::Right => {
+                    self.menu_context.active_context_menu_item.next_scroll();
+                }
+                ActiveFocus::FilterPacks(_) => {
+                    self.menu_context.active_focus = ActiveFocus::Left;
+                }
             }
         }
     }
@@ -77,14 +85,19 @@ impl App {
             ActiveFocus::Right => {
                 self.menu_context.active_context_menu_item.previous_scroll();
             }
+            ActiveFocus::FilterPacks(_) => {}
         }
     }
 
     pub fn handle_tab(&mut self) {
-        match self.menu_context.active_menu_item {
-            MenuItem::Summary => self.menu_context.active_menu_item = MenuItem::Actions,
-            MenuItem::Actions => self.menu_context.active_menu_item = MenuItem::Packs,
-            MenuItem::Packs => self.menu_context.active_menu_item = MenuItem::Summary,
+        if let ActiveFocus::FilterPacks(_) = self.menu_context.active_focus {
+            self.menu_context.active_focus = ActiveFocus::Left;
+        } else {
+            match self.menu_context.active_menu_item {
+                MenuItem::Summary => self.menu_context.active_menu_item = MenuItem::Actions,
+                MenuItem::Actions => self.menu_context.active_menu_item = MenuItem::Packs,
+                MenuItem::Packs => self.menu_context.active_menu_item = MenuItem::Summary,
+            }
         }
     }
 
@@ -119,6 +132,14 @@ impl App {
     pub fn focus_right(&mut self) {
         self.menu_context.active_focus = ActiveFocus::Right;
     }
+
+    pub fn focus_filter_packs(&mut self) {
+        let text = match self.packs.pack_list {
+            Some(ref pack_list) => pack_list.filter.clone(),
+            None => "".to_string(),
+        };
+        self.menu_context.active_focus = ActiveFocus::FilterPacks(TextArea::new(vec![text]));
+    }
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -138,7 +159,8 @@ impl From<MenuItem> for usize {
     }
 }
 
-pub enum ActiveFocus {
+pub enum ActiveFocus<'a> {
+    FilterPacks(TextArea<'a>),
     Left,
     Right,
 }

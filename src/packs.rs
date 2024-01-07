@@ -2,6 +2,7 @@ use packs::packs::configuration::Configuration;
 use packs::packs::pack::Pack;
 use ratatui::widgets::{ListState};
 use std::collections::{BTreeSet, HashMap};
+use regex::Regex;
 
 pub struct Packs {
     pub configuration: Configuration,
@@ -172,6 +173,7 @@ pub struct PackList {
     pub state: ListState,
     pub items: Vec<Pack>,
     pub filter: String,
+    filtered_items: HashMap<String,Vec<Pack>>,
 }
 
 impl PackList {
@@ -180,17 +182,37 @@ impl PackList {
             state: ListState::default(),
             items,
             filter: String::default(),
+            filtered_items: HashMap::new(),
         }
     }
 
-    pub fn selected_pack(&self) -> Option<Pack> {
-        self.state.selected().map(|i| self.items[i].clone())
+    pub fn filtered_items(&mut self) -> Vec<Pack> {
+        let filter = self.filter.clone();
+        let filter_regex = Regex::new(&filter.to_string()).unwrap();
+
+        match self.filtered_items.get(&filter) {
+            Some(items) => items.clone(),
+            None => {
+                let filtered_items: Vec<Pack> = self
+                    .items
+                    .iter()
+                    .filter(|item| filter_regex.is_match(&item.name))
+                    .cloned()
+                    .collect();
+                self.filtered_items.insert(filter, filtered_items.clone());
+                filtered_items
+            }
+        }
+    }
+
+    pub fn selected_pack(&mut self) -> Option<Pack> {
+        self.state.selected().map(|i| self.filtered_items()[i].clone())
     }
 
     pub fn next(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
-                if i >= self.items.len() - 1 {
+                if i >= self.filtered_items().len() - 1 {
                     0
                 } else {
                     i + 1
@@ -205,7 +227,7 @@ impl PackList {
         let i = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.items.len() - 1
+                    self.filtered_items().len() - 1
                 } else {
                     i - 1
                 }
