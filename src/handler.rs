@@ -12,15 +12,15 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
         KeyCode::Tab => {
             app.handle_tab();
             return Ok(());
-        },
+        }
         KeyCode::Esc => {
             app.focus_left();
             return Ok(());
-        },
+        }
         KeyCode::Down | KeyCode::Char('j') => {
             app.next();
             return Ok(());
-        },
+        }
         _ => {}
     }
     if let ActiveFocus::FilterPacks(ref mut textarea) = app.menu_context.active_focus {
@@ -41,6 +41,7 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
         KeyCode::Char('p') => app.handle_top_menu_p(),
         KeyCode::Char('a') => app.handle_top_menu_a(),
 
+        KeyCode::Left => app.focus_left(),
         KeyCode::Right => app.focus_right(),
         KeyCode::Char('f') => app.focus_filter_packs(),
 

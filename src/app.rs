@@ -1,4 +1,4 @@
-use crate::packs::Packs;
+use crate::packs::{PackDependentViolation, Packs};
 use anyhow::Result;
 use tui_textarea::TextArea;
 
@@ -23,7 +23,7 @@ impl Default for MenuContext<'_> {
     fn default() -> Self {
         Self {
             active_menu_item: MenuItem::Summary,
-            active_context_menu_item: ContextMenuItem::Info(0),
+            active_context_menu_item: ContextMenuItem::Info(ContextMenuInfo::default()),
             active_focus: ActiveFocus::Left,
         }
     }
@@ -92,12 +92,10 @@ impl App<'_> {
     pub fn handle_tab(&mut self) {
         if let ActiveFocus::FilterPacks(_) = self.menu_context.active_focus {
             self.menu_context.active_focus = ActiveFocus::Left;
-        } else {
-            match self.menu_context.active_menu_item {
-                MenuItem::Summary => self.menu_context.active_menu_item = MenuItem::Actions,
-                MenuItem::Actions => self.menu_context.active_menu_item = MenuItem::Packs,
-                MenuItem::Packs => self.menu_context.active_menu_item = MenuItem::Summary,
-            }
+        } else if let ContextMenuItem::ViolationDependents(ref mut violation) =
+            self.menu_context.active_context_menu_item
+        {
+            violation.next_sort_column();
         }
     }
 
@@ -114,15 +112,18 @@ impl App<'_> {
     }
 
     pub fn handle_context_menu_d(&mut self) {
-        self.menu_context.active_context_menu_item = ContextMenuItem::NoViolationDependents(0);
+        self.menu_context.active_context_menu_item =
+            ContextMenuItem::NoViolationDependents(ContextMenuNoViolationDependents::default());
     }
 
     pub fn handle_context_menu_v(&mut self) {
-        self.menu_context.active_context_menu_item = ContextMenuItem::ViolationDependents(0);
+        self.menu_context.active_context_menu_item =
+            ContextMenuItem::ViolationDependents(ContextMenuViolationDependents::default());
     }
 
     pub fn handle_context_menu_i(&mut self) {
-        self.menu_context.active_context_menu_item = ContextMenuItem::Info(0);
+        self.menu_context.active_context_menu_item =
+            ContextMenuItem::Info(ContextMenuInfo::default());
     }
 
     pub fn focus_left(&mut self) {
@@ -165,26 +166,99 @@ pub enum ActiveFocus<'a> {
     Right,
 }
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum SortDirection {
+    Ascending,
+    Descending,
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct ContextMenuInfo {
+    pub scroll: usize,
+}
+#[derive(Copy, Clone, Debug, Default)]
+pub struct ContextMenuNoViolationDependents {
+    pub scroll: usize,
+}
+
+pub const DEPENDENT_PACK_VIOLATION_COUNT_HEADERS: [&str; 5] = [
+    "architecture",
+    "dependency",
+    "folder_visibility",
+    "privacy",
+    "visibility",
+];
+
+pub const DEPENDENT_PACK_VIOLATION_HEADER_TITLES: [&str; 7] =
+    ["pack", "cnst", "arch", "dep", "fvis", "priv", "vis"];
+
+impl ContextMenuViolationDependents {
+    pub fn next_sort_column(&mut self) {
+        self.sort_column += 1;
+        if self.sort_column > DEPENDENT_PACK_VIOLATION_HEADER_TITLES.len() - 1 {
+            self.sort_column = 0;
+        }
+    }
+
+    pub fn sort_violations(&mut self, violations: &mut [&PackDependentViolation]) {
+        match self.sort_column {
+            0 => violations.sort_by(|a, b| a.defining_pack_name.cmp(&b.defining_pack_name)),
+            1..=5 => violations.sort_by(|a, b| {
+                a.count_for_violation_type(
+                    DEPENDENT_PACK_VIOLATION_COUNT_HEADERS[self.sort_column - 1],
+                )
+                .cmp(&b.count_for_violation_type(
+                    DEPENDENT_PACK_VIOLATION_COUNT_HEADERS[self.sort_column - 1],
+                ))
+            }),
+            6 => violations.sort_by(|a, b| a.num_constants().cmp(&b.num_constants())),
+            _ => {}
+        }
+        // TODO: remove hardcoded sort direction logic
+        if self.sort_column == 0 {
+            self.sort_direction = SortDirection::Ascending;
+        } else {
+            self.sort_direction = SortDirection::Descending;
+            violations.reverse();
+        }
+    }
+}
+#[derive(Copy, Clone, Debug)]
+pub struct ContextMenuViolationDependents {
+    pub scroll: usize,
+    pub sort_column: usize,
+    pub sort_direction: SortDirection,
+}
 #[derive(Copy, Clone, Debug)]
 pub enum ContextMenuItem {
-    Info(usize),
-    NoViolationDependents(usize),
-    ViolationDependents(usize),
+    Info(ContextMenuInfo),
+    NoViolationDependents(ContextMenuNoViolationDependents),
+    ViolationDependents(ContextMenuViolationDependents),
+}
+
+impl Default for ContextMenuViolationDependents {
+    fn default() -> Self {
+        Self {
+            scroll: 0,
+            sort_column: 0,
+            sort_direction: SortDirection::Ascending,
+        }
+    }
 }
 
 impl ContextMenuItem {
     pub fn set_scroll(&mut self, s: usize) {
         match self {
-            ContextMenuItem::Info(scroll) => *scroll = s,
-            ContextMenuItem::NoViolationDependents(scroll) => *scroll = s,
-            ContextMenuItem::ViolationDependents(scroll) => *scroll = s,
+            ContextMenuItem::Info(info) => info.scroll = s,
+            ContextMenuItem::NoViolationDependents(no_violation) => no_violation.scroll = s,
+            ContextMenuItem::ViolationDependents(violation) => violation.scroll = s,
         }
     }
     pub fn scroll(&self) -> usize {
         match self {
-            ContextMenuItem::Info(scroll) => *scroll,
-            ContextMenuItem::NoViolationDependents(scroll) => *scroll,
-            ContextMenuItem::ViolationDependents(scroll) => *scroll,
+            ContextMenuItem::Info(info) => info.scroll,
+            ContextMenuItem::NoViolationDependents(no_violation) => no_violation.scroll,
+            ContextMenuItem::ViolationDependents(violation) => violation.scroll,
         }
     }
 
@@ -194,27 +268,29 @@ impl ContextMenuItem {
 
     pub fn next_scroll(&mut self) {
         match self {
-            ContextMenuItem::Info(scroll) => *scroll += 1,
-            ContextMenuItem::NoViolationDependents(scroll) => *scroll += 1,
-            ContextMenuItem::ViolationDependents(scroll) => *scroll += 1,
+            ContextMenuItem::Info(info) => info.scroll += 1,
+            ContextMenuItem::NoViolationDependents(no_violation) => no_violation.scroll += 1,
+            ContextMenuItem::ViolationDependents(violation) => {
+                violation.scroll += 1;
+            }
         }
     }
 
     pub fn previous_scroll(&mut self) {
         match self {
-            ContextMenuItem::Info(scroll) => {
-                if *scroll > 0 {
-                    *scroll -= 1;
+            ContextMenuItem::Info(info) => {
+                if info.scroll > 0 {
+                    info.scroll -= 1;
                 }
             }
-            ContextMenuItem::NoViolationDependents(scroll) => {
-                if *scroll > 0 {
-                    *scroll -= 1;
+            ContextMenuItem::NoViolationDependents(no_violation) => {
+                if no_violation.scroll > 0 {
+                    no_violation.scroll -= 1;
                 }
             }
-            ContextMenuItem::ViolationDependents(scroll) => {
-                if *scroll > 0 {
-                    *scroll -= 1;
+            ContextMenuItem::ViolationDependents(violation) => {
+                if violation.scroll > 0 {
+                    violation.scroll -= 1;
                 }
             }
         }
@@ -224,9 +300,9 @@ impl ContextMenuItem {
 impl From<ContextMenuItem> for usize {
     fn from(input: ContextMenuItem) -> usize {
         match input {
-            ContextMenuItem::Info(_scroll) => 0,
-            ContextMenuItem::NoViolationDependents(_scroll) => 1,
-            ContextMenuItem::ViolationDependents(_scroll) => 2,
+            ContextMenuItem::Info(_) => 0,
+            ContextMenuItem::NoViolationDependents(_) => 1,
+            ContextMenuItem::ViolationDependents(_) => 2,
         }
     }
 }

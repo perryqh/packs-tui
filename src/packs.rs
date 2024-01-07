@@ -1,8 +1,8 @@
 use packs::packs::configuration::Configuration;
 use packs::packs::pack::Pack;
-use ratatui::widgets::{ListState};
-use std::collections::{BTreeSet, HashMap};
+use ratatui::widgets::ListState;
 use regex::Regex;
+use std::collections::{BTreeSet, HashMap};
 
 pub struct Packs {
     pub configuration: Configuration,
@@ -19,6 +19,19 @@ pub struct PackDependentViolation {
     pub referencing_pack_name: String,
     pub violation_type_counts: HashMap<String, usize>,
     pub constant_counts: HashMap<String, usize>,
+}
+
+impl PackDependentViolation {
+    pub fn count_for_violation_type(&self, violation_type: &str) -> usize {
+        match self.violation_type_counts.get(violation_type) {
+            Some(count) => *count,
+            None => 0,
+        }
+    }
+
+    pub fn num_constants(&self) -> usize {
+        self.constant_counts.len()
+    }
 }
 
 impl Default for Packs {
@@ -173,17 +186,21 @@ pub struct PackList {
     pub state: ListState,
     pub items: Vec<Pack>,
     pub filter: String,
-    filtered_items: HashMap<String,Vec<Pack>>,
+    filtered_items: HashMap<String, Vec<Pack>>,
 }
 
 impl PackList {
     fn with_items(items: Vec<Pack>) -> PackList {
-        PackList {
+        let mut pack_list = PackList {
             state: ListState::default(),
             items,
             filter: String::default(),
             filtered_items: HashMap::new(),
+        };
+        if !pack_list.items.is_empty() {
+            pack_list.state.select(Some(0));
         }
+        pack_list
     }
 
     pub fn filtered_items(&mut self) -> Vec<Pack> {
@@ -206,7 +223,18 @@ impl PackList {
     }
 
     pub fn selected_pack(&mut self) -> Option<Pack> {
-        self.state.selected().map(|i| self.filtered_items()[i].clone())
+        match self.state.selected() {
+            Some(i) => {
+                if self.filtered_items().is_empty() {
+                    None
+                } else if i >= self.filtered_items.len() {
+                    Some(self.filtered_items()[0].clone())
+                } else {
+                    Some(self.filtered_items()[i].clone())
+                }
+            }
+            None => None,
+        }
     }
 
     pub fn next(&mut self) {

@@ -2,7 +2,10 @@ use ratatui::widgets::block::Title;
 use ratatui::{prelude::*, widgets::*};
 use std::rc::Rc;
 
-use crate::app::{ActiveFocus, App, ContextMenuItem, MenuItem};
+use crate::app::{
+    ActiveFocus, App, ContextMenuItem, MenuItem, SortDirection,
+    DEPENDENT_PACK_VIOLATION_COUNT_HEADERS, DEPENDENT_PACK_VIOLATION_HEADER_TITLES,
+};
 
 /// Renders the user interface widgets.
 pub fn render(app: &mut App, frame: &mut Frame) {
@@ -25,14 +28,6 @@ fn render_actions(app: &mut App, frame: &mut Frame) {
     frame.render_widget(top_menu_tabs, chunks[0]);
 }
 
-const DEPENDENT_PACK_VIOLATION_COUNT_HEADERS: [&str; 5] = [
-    "architecture",
-    "dependency",
-    "folder_visibility",
-    "privacy",
-    "visibility",
-];
-
 fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
     let pack_name = app
         .packs
@@ -41,34 +36,55 @@ fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
         .unwrap_or_else(|| panic!("no pack selected"))
         .name
         .clone();
+    let content_menu_violation_dependents = match app.menu_context.active_context_menu_item {
+        ContextMenuItem::ViolationDependents(ref mut content_menu_violation_dependents) => {
+            content_menu_violation_dependents
+        }
+        _ => panic!("expected ContextMenuItem::ViolationDependents"),
+    };
     let selected_style = Style::default().add_modifier(Modifier::REVERSED);
-    let header_titles = ["pack", "arch", "dep", "fvis", "priv", "vis", "total"];
-    // header_titles.extend(DEPENDENT_PACK_VIOLATION_COUNT_HEADERS.iter());
-    // header_titles.push("total");
-    let header_cells = header_titles
+    let header_cells = DEPENDENT_PACK_VIOLATION_HEADER_TITLES
         .iter()
-        .map(|h| Cell::from(*h).style(Style::default().fg(Color::LightCyan)));
-    let header = Row::new(header_cells)
-        .bold()
-        .height(1);
-    let violations = app
+        .enumerate()
+        .map(|(index, header_title)| {
+            if content_menu_violation_dependents.sort_column == index {
+                let arrow = match content_menu_violation_dependents.sort_direction {
+                    SortDirection::Descending => "↑",
+                    SortDirection::Ascending => "↓",
+                };
+                Cell::from(format!("{} {}", *header_title, arrow)).style(
+                    Style::default()
+                        .fg(Color::LightCyan)
+                        .bg(Color::DarkGray)
+                        .bold(),
+                )
+            } else {
+                Cell::from(*header_title).style(Style::default().fg(Color::LightCyan))
+            }
+        });
+    let header = Row::new(header_cells).bold().height(1);
+    let mut violations = app
         .packs
         .get_pack_dependent_violations_by_selected_defining_pack_name();
-    let scroll = app.menu_context.active_context_menu_item.scroll();
+    content_menu_violation_dependents.sort_violations(&mut violations);
+
+    let mut scroll = app.menu_context.active_context_menu_item.scroll();
+
     if scroll >= violations.len() && !violations.is_empty() {
-        app.menu_context.active_context_menu_item.set_scroll(violations.len() - 1);
+        scroll = violations.len() - 1;
+        app.menu_context.active_context_menu_item.set_scroll(scroll);
     }
+
     let mut table_state = TableState::default().with_selected(Some(scroll));
     let rows = violations.iter().map(|violation| {
         let height = 1;
         let mut cells = vec![];
         cells.push(Cell::from(violation.referencing_pack_name.clone()));
         for key in DEPENDENT_PACK_VIOLATION_COUNT_HEADERS {
-            let count = violation.violation_type_counts.get(key).unwrap_or(&0);
+            let count = violation.count_for_violation_type(key);
             cells.push(Cell::from(count.to_string()));
         }
-        let total = violation.violation_type_counts.values().sum::<usize>();
-        cells.push(Cell::from(total.to_string()));
+        cells.push(Cell::from(violation.num_constants().to_string()));
         Row::new(cells).height(height as u16)
     });
     let max_len: usize = violations
@@ -77,17 +93,19 @@ fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
         .max()
         .unwrap_or(0);
     let mut widths = vec![Constraint::Length(max_len as u16)];
-    DEPENDENT_PACK_VIOLATION_COUNT_HEADERS
+    DEPENDENT_PACK_VIOLATION_HEADER_TITLES
         .iter()
-        .for_each(|h| widths.push(Constraint::Min(h.len() as u16)));
-    widths.push(Constraint::Length(5));
+        .skip(1)
+        .for_each(|h| {
+            widths.push(Constraint::Min(h.len() as u16));
+        });
     let table = Table::new(rows, widths)
         .header(header)
         .block(
             Block::default()
                 .borders(Borders::ALL)
                 .title(format!("Violation Dependents ({})", violations.len()))
-                .title(Title::from(pack_name.clone()).alignment(Alignment::Right))
+                .title(Title::from(pack_name.clone()).alignment(Alignment::Right)),
         )
         .highlight_style(selected_style)
         .highlight_symbol(">> ");
@@ -95,7 +113,7 @@ fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
 
     let mut scrollbar_state = ScrollbarState::default()
         .content_length(violations.len())
-        .position(app.menu_context.active_context_menu_item.scroll());
+        .position(scroll);
     let scrollbar = Scrollbar::default()
         .orientation(ScrollbarOrientation::VerticalRight)
         .begin_symbol(Some("↑"))
@@ -118,10 +136,7 @@ fn render_info_context(app: &mut App, frame: &mut Frame, rect: Rect) {
         .selected_pack()
         .unwrap_or_else(|| panic!("no pack selected"));
     let info = app.packs.pack_info(&pack);
-    let lines = info
-        .into_iter()
-        .map(Line::from)
-        .collect::<Vec<Line>>();
+    let lines = info.into_iter().map(Line::from).collect::<Vec<Line>>();
     let title_block = Block::new()
         .title(Span::styled(
             "info",
@@ -141,10 +156,7 @@ fn render_info_context(app: &mut App, frame: &mut Frame, rect: Rect) {
         .begin_symbol(Some("↑"))
         .end_symbol(Some("↓"));
 
-    frame.render_widget(
-        paragraph,
-        rect,
-    );
+    frame.render_widget(paragraph, rect);
     frame.render_stateful_widget(
         scrollbar,
         rect.inner(&Margin {
@@ -184,10 +196,7 @@ fn render_no_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) 
         .orientation(ScrollbarOrientation::VerticalRight)
         .begin_symbol(Some("↑"))
         .end_symbol(Some("↓"));
-    frame.render_widget(
-        paragraph,
-        rect,
-    );
+    frame.render_widget(paragraph, rect);
     frame.render_stateful_widget(
         scrollbar,
         rect.inner(&Margin {
@@ -206,10 +215,10 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
     let funny = match app.packs.get_pack_list().selected_pack() {
         Some(_pack) => match app.menu_context.active_context_menu_item {
             ContextMenuItem::Info(_scroll) => render_info_context,
-            ContextMenuItem::NoViolationDependents(_scroll) => render_no_violation_dependents,
-            ContextMenuItem::ViolationDependents(_scroll) => render_violation_dependents,
+            ContextMenuItem::NoViolationDependents(_) => render_no_violation_dependents,
+            ContextMenuItem::ViolationDependents(_) => render_violation_dependents,
         },
-        None => |_app: &mut App, _frame: &mut Frame, _rect: Rect|{},
+        None => |_app: &mut App, _frame: &mut Frame, _rect: Rect| {},
     };
 
     match app.menu_context.active_focus {
@@ -249,15 +258,11 @@ fn render_pack_list(app: &mut App, frame: &mut Frame, outer_layout: Rect) {
 
     let inner_layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(vec![
-            Constraint::Length(2),
-            Constraint::Percentage(75),
-        ])
+        .constraints(vec![Constraint::Length(2), Constraint::Percentage(75)])
         .margin(1)
         .split(outer_layout);
 
-    let filter_title_block = Block::default()
-        .borders(Borders::BOTTOM);
+    let filter_title_block = Block::default().borders(Borders::BOTTOM);
     frame.render_widget(filter_title_block, inner_layout[0]);
 
     match app.menu_context.active_focus {
@@ -274,11 +279,7 @@ fn render_pack_list(app: &mut App, frame: &mut Frame, outer_layout: Rect) {
                     existing_filter = "ctrl-f".to_string();
                 }
                 let line = Line::from(vec![
-                    Span::styled(
-                        "Filter: ",
-                        Style::default()
-                            .fg(Color::Gray)
-                    ),
+                    Span::styled("Filter: ", Style::default().fg(Color::Gray)),
                     Span::styled(existing_filter, Style::default().fg(Color::White).bold()),
                 ]);
 
@@ -295,13 +296,12 @@ fn render_pack_list(app: &mut App, frame: &mut Frame, outer_layout: Rect) {
         .map(|pack| ListItem::new(pack.name.clone()))
         .collect();
 
-    let items = List::new(list_items)
-        .highlight_style(
-            Style::default()
-                .bg(Color::LightGreen)
-                .fg(Color::Black)
-                .add_modifier(Modifier::BOLD),
-        );
+    let items = List::new(list_items).highlight_style(
+        Style::default()
+            .bg(Color::LightGreen)
+            .fg(Color::Black)
+            .add_modifier(Modifier::BOLD),
+    );
     let pack_list = app.packs.get_pack_list();
     frame.render_stateful_widget(items, inner_layout[1], &mut pack_list.state);
 }

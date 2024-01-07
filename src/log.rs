@@ -1,8 +1,8 @@
-use std::path::PathBuf;
-use log::{LevelFilter};
+use log::LevelFilter;
 use log4rs::append::file::FileAppender;
 use log4rs::config::{Appender, Config, Logger, Root};
 use log4rs::encode::pattern::PatternEncoder;
+use std::path::PathBuf;
 const LOG_PATTERN: &str = "{d(%Y-%m-%d %H:%M:%S)} | {l} | {f}:{L} | {m}{n}";
 
 pub fn initialize_logging() {
@@ -14,7 +14,8 @@ pub fn initialize_logging() {
             .join("packs-tui")
     };
 
-    std::fs::create_dir_all(&data_local_dir).unwrap_or_else(|_| panic!("Unable to create {:?}", data_local_dir));
+    std::fs::create_dir_all(&data_local_dir)
+        .unwrap_or_else(|_| panic!("Unable to create {:?}", data_local_dir));
 
     let logfile = FileAppender::builder()
         .encoder(Box::new(PatternEncoder::new(LOG_PATTERN)))
@@ -22,7 +23,10 @@ pub fn initialize_logging() {
         .build(data_local_dir.join("packs-tui.log"))
         .expect("Failed to build log file appender.");
 
-    let levelfilter = match std::env::var("PACKS_TUI_LOG_LEVEL").unwrap_or_else(|_| "info".to_string()).as_str() {
+    let levelfilter = match std::env::var("PACKS_TUI_LOG_LEVEL")
+        .unwrap_or_else(|_| "info".to_string())
+        .as_str()
+    {
         "off" => LevelFilter::Off,
         "warn" => LevelFilter::Warn,
         "info" => LevelFilter::Info,
