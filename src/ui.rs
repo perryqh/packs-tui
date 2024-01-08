@@ -3,8 +3,7 @@ use ratatui::{prelude::*, widgets::*};
 use std::rc::Rc;
 
 use crate::app::{
-    ActiveFocus, App, ContextMenuItem, MenuItem, SortDirection,
-    DEPENDENT_PACK_VIOLATION_COUNT_HEADERS, DEPENDENT_PACK_VIOLATION_HEADER_TITLES,
+    ActiveFocus, App, ContextMenuItem, MenuItem, DEPENDENT_PACK_VIOLATION_COUNT_HEADERS,
 };
 
 /// Renders the user interface widgets.
@@ -43,23 +42,20 @@ fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
         _ => panic!("expected ContextMenuItem::ViolationDependents"),
     };
     let selected_style = Style::default().add_modifier(Modifier::REVERSED);
-    let header_cells = DEPENDENT_PACK_VIOLATION_HEADER_TITLES
+    let header_titles = &content_menu_violation_dependents.header_titles();
+    let header_cells = header_titles
         .iter()
         .enumerate()
         .map(|(index, header_title)| {
             if content_menu_violation_dependents.sort_column == index {
-                let arrow = match content_menu_violation_dependents.sort_direction {
-                    SortDirection::Descending => "↑",
-                    SortDirection::Ascending => "↓",
-                };
-                Cell::from(format!("{} {}", *header_title, arrow)).style(
+                Cell::from(header_title.clone()).style(
                     Style::default()
                         .fg(Color::LightCyan)
                         .bg(Color::DarkGray)
                         .bold(),
                 )
             } else {
-                Cell::from(*header_title).style(Style::default().fg(Color::LightCyan))
+                Cell::from(header_title.clone()).style(Style::default().fg(Color::LightCyan))
             }
         });
     let header = Row::new(header_cells).bold().height(1);
@@ -93,12 +89,10 @@ fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
         .max()
         .unwrap_or(0);
     let mut widths = vec![Constraint::Length(max_len as u16)];
-    DEPENDENT_PACK_VIOLATION_HEADER_TITLES
+    header_titles
         .iter()
         .skip(1)
-        .for_each(|h| {
-            widths.push(Constraint::Min((h.len() + 2) as u16));
-        });
+        .for_each(|h| widths.push(Constraint::Length(h.len() as u16)));
     let table = Table::new(rows, widths)
         .header(header)
         .block(

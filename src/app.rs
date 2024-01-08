@@ -189,13 +189,22 @@ pub const DEPENDENT_PACK_VIOLATION_COUNT_HEADERS: [&str; 5] = [
     "visibility",
 ];
 
-pub const DEPENDENT_PACK_VIOLATION_HEADER_TITLES: [&str; 7] =
+pub const DEPENDENT_PACK_VIOLATION_HEADER_ABBR_TITLES: [&str; 7] =
     ["pack", "cnst", "arch", "dep", "fvis", "priv", "vis"];
+pub const DEPENDENT_PACK_VIOLATION_HEADER_FULL_TITLES: [&str; 7] = [
+    "pack",
+    "constant",
+    "architecture",
+    "dependency",
+    "folder visibility",
+    "privacy",
+    "visibility",
+];
 
 impl ContextMenuViolationDependents {
     pub fn next_sort_column(&mut self) {
         self.sort_column += 1;
-        if self.sort_column > DEPENDENT_PACK_VIOLATION_HEADER_TITLES.len() - 1 {
+        if self.sort_column > DEPENDENT_PACK_VIOLATION_HEADER_ABBR_TITLES.len() - 1 {
             self.sort_column = 0;
         }
 
@@ -205,6 +214,28 @@ impl ContextMenuViolationDependents {
         } else {
             self.sort_direction = SortDirection::Descending;
         }
+    }
+
+    pub fn header_titles(&mut self) -> Vec<String> {
+        DEPENDENT_PACK_VIOLATION_HEADER_ABBR_TITLES
+            .iter()
+            .enumerate()
+            .map(|(i, title)| {
+                if i == self.sort_column {
+                    format!(
+                        "{} {}",
+                        if self.sort_direction == SortDirection::Descending {
+                            "▲"
+                        } else {
+                            "▼"
+                        },
+                        DEPENDENT_PACK_VIOLATION_HEADER_FULL_TITLES[i]
+                    )
+                } else {
+                    title.to_string()
+                }
+            })
+            .collect::<Vec<String>>()
     }
 
     pub fn sort_violations(&mut self, violations: &mut [&PackDependentViolation]) {
