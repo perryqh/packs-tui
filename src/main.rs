@@ -1,6 +1,7 @@
 use packs_tui::app::{App, AppResult};
 use packs_tui::event::{Event, EventHandler};
 use packs_tui::handler::handle_key_events;
+use packs_tui::log::initialize_logging;
 use packs_tui::tui::Tui;
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
@@ -16,6 +17,7 @@ fn main() -> AppResult<()> {
     let events = EventHandler::new(250);
     let mut tui = Tui::new(terminal, events);
     tui.init()?;
+    initialize_logging();
 
     // Start the main loop.
     while app.running {
