@@ -116,6 +116,11 @@ impl App<'_> {
             ContextMenuItem::NoViolationDependents(ContextMenuNoViolationDependents::default());
     }
 
+    pub fn handle_context_menu_c(&mut self) {
+        self.menu_context.active_context_menu_item =
+            ContextMenuItem::ConstantViolations(ContextMenuConstantViolations::default());
+    }
+
     pub fn handle_context_menu_v(&mut self) {
         self.menu_context.active_context_menu_item =
             ContextMenuItem::ViolationDependents(ContextMenuViolationDependents::default());
@@ -255,14 +260,32 @@ pub struct ContextMenuViolationDependents {
     pub sort_column: usize,
     pub sort_direction: SortDirection,
 }
+
+#[derive(Copy, Clone, Debug)]
+pub struct ContextMenuConstantViolations {
+    pub scroll: usize,
+    pub sort_column: usize,
+    pub sort_direction: SortDirection,
+}
 #[derive(Copy, Clone, Debug)]
 pub enum ContextMenuItem {
     Info(ContextMenuInfo),
     NoViolationDependents(ContextMenuNoViolationDependents),
     ViolationDependents(ContextMenuViolationDependents),
+    ConstantViolations(ContextMenuConstantViolations),
 }
 
 impl Default for ContextMenuViolationDependents {
+    fn default() -> Self {
+        Self {
+            scroll: 0,
+            sort_column: 0,
+            sort_direction: SortDirection::Ascending,
+        }
+    }
+}
+
+impl Default for ContextMenuConstantViolations {
     fn default() -> Self {
         Self {
             scroll: 0,
@@ -278,6 +301,9 @@ impl ContextMenuItem {
             ContextMenuItem::Info(info) => info.scroll = s,
             ContextMenuItem::NoViolationDependents(no_violation) => no_violation.scroll = s,
             ContextMenuItem::ViolationDependents(violation) => violation.scroll = s,
+            ContextMenuItem::ConstantViolations(constant_violations) => {
+                constant_violations.scroll = s
+            }
         }
     }
     pub fn scroll(&self) -> usize {
@@ -285,6 +311,7 @@ impl ContextMenuItem {
             ContextMenuItem::Info(info) => info.scroll,
             ContextMenuItem::NoViolationDependents(no_violation) => no_violation.scroll,
             ContextMenuItem::ViolationDependents(violation) => violation.scroll,
+            ContextMenuItem::ConstantViolations(violation) => violation.scroll,
         }
     }
 
@@ -296,9 +323,8 @@ impl ContextMenuItem {
         match self {
             ContextMenuItem::Info(info) => info.scroll += 1,
             ContextMenuItem::NoViolationDependents(no_violation) => no_violation.scroll += 1,
-            ContextMenuItem::ViolationDependents(violation) => {
-                violation.scroll += 1;
-            }
+            ContextMenuItem::ViolationDependents(violation) => violation.scroll += 1,
+            ContextMenuItem::ConstantViolations(violation) => violation.scroll += 1,
         }
     }
 
@@ -319,6 +345,11 @@ impl ContextMenuItem {
                     violation.scroll -= 1;
                 }
             }
+            ContextMenuItem::ConstantViolations(violation) => {
+                if violation.scroll > 0 {
+                    violation.scroll -= 1;
+                }
+            }
         }
     }
 }
@@ -329,6 +360,7 @@ impl From<ContextMenuItem> for usize {
             ContextMenuItem::Info(_) => 0,
             ContextMenuItem::NoViolationDependents(_) => 1,
             ContextMenuItem::ViolationDependents(_) => 2,
+            ContextMenuItem::ConstantViolations(_) => 3,
         }
     }
 }

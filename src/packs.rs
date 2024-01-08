@@ -13,6 +13,7 @@ pub struct Packs {
     pub pack_list: Option<PackList>,
     pub pack_dependents: Option<HashMap<String, BTreeSet<String>>>,
     pub pack_dependent_violations: Option<Vec<PackDependentViolation>>,
+    pub constant_summaries: Option<Vec<Rc<ConstantSummary>>>,
 }
 
 pub struct PackDependentViolation {
@@ -20,6 +21,14 @@ pub struct PackDependentViolation {
     pub referencing_pack_name: String,
     pub violation_type_counts: HashMap<String, usize>,
     pub constant_counts: HashMap<String, usize>,
+}
+
+// Vec<(String /*constant*/, usize /*count*/, usize /*num packs*/,> {
+pub struct ConstantSummary {
+    pub defining_pack_name: String,
+    pub constant: String,
+    pub count: usize,
+    pub referencing_pack_counts: HashMap<String, usize>,
 }
 
 impl PackDependentViolation {
@@ -41,6 +50,7 @@ impl Default for Packs {
         // let timestamp = configuration.pack_set.timestamp();
         Packs {
             configuration,
+            constant_summaries: None,
             // timestamp,
             packs: None,
             pack_list: None,
@@ -169,9 +179,45 @@ impl Packs {
                     .fold(0, |sum, violation| {
                         sum + violation.count_for_violation_type(header)
                     });
-                summary.push((header.to_string(), count.to_string()));
+                summary.push((format!("{} violations", header), count.to_string()));
             });
         summary
+    }
+
+    pub fn get_constant_summaries(&mut self) -> Vec<Rc<ConstantSummary>> {
+        self.check_stale();
+        if self.constant_summaries.is_none() {
+            let mut constant_summaries: HashMap<(String, String), ConstantSummary> =
+                self.configuration.pack_set.all_violations.iter().fold(
+                    HashMap::new(),
+                    |mut map, violation| {
+                        let defining_pack_name = violation.defining_pack_name.clone();
+                        let constant = violation.constant_name.clone();
+                        let key = (defining_pack_name.clone(), constant.clone());
+                        let entry = map.entry(key).or_insert(ConstantSummary {
+                            defining_pack_name,
+                            constant,
+                            count: 0,
+                            referencing_pack_counts: HashMap::new(),
+                        });
+                        entry.count += 1;
+                        entry
+                            .referencing_pack_counts
+                            .entry(violation.referencing_pack_name.clone())
+                            .and_modify(|count| *count += 1)
+                            .or_insert(1);
+                        map
+                    },
+                );
+
+            self.constant_summaries = Some(
+                constant_summaries
+                    .drain()
+                    .map(|(_, v)| Rc::new(v))
+                    .collect(),
+            );
+        }
+        self.constant_summaries.as_ref().unwrap().clone()
     }
 
     pub fn check_stale(&mut self) {

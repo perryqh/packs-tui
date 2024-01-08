@@ -48,6 +48,7 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
         KeyCode::Up | KeyCode::Char('k') => app.previous(),
 
         // Content menu handlers
+        KeyCode::Char('c') => app.handle_context_menu_c(),
         KeyCode::Char('d') => app.handle_context_menu_d(),
         KeyCode::Char('v') => app.handle_context_menu_v(),
         KeyCode::Char('i') => app.handle_context_menu_i(),

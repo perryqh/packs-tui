@@ -20,29 +20,28 @@ fn render_summary(app: &mut App, frame: &mut Frame) {
     frame.render_widget(top_menu_tabs, chunks[0]);
     let menu_titles = vec!["Info".to_string(), "Constant Violations".to_string()];
 
-    if let Some(context_menu_tabs) = build_context_menu(app, &menu_titles) {
-        frame.render_widget(context_menu_tabs, chunks[2])
-    }
-
-    match app.menu_context.active_context_menu_item {
+    let context_menu_index = match app.menu_context.active_context_menu_item {
         ContextMenuItem::Info(_context_menu_info) => {
-            let lines: Vec<Line> = app
-                .packs
-                .get_summary()
-                .into_iter()
-                .map(|(key, value)| {
-                    Line::from(vec![
-                        Span::styled(format!("{}: ", key), Style::default().fg(Color::White)),
-                        Span::styled(value, Style::default().fg(Color::LightCyan)),
-                    ])
-                })
-                .collect();
+            let widths = [Constraint::Length(30), Constraint::Length(5)];
+            let rows = app.packs.get_summary().into_iter().map(|(key, value)| {
+                Row::new(vec![
+                    Cell::from(key).style(Style::default().fg(Color::White)),
+                    Cell::from(value).style(Style::default().fg(Color::LightCyan)),
+                ])
+                .bottom_margin(1)
+            });
+            let table = Table::new(rows, widths).column_spacing(3);
 
-            let text = Text::from(lines);
-            let p = Paragraph::new(text).alignment(Alignment::Center);
-            frame.render_widget(p, chunks[1]);
+            frame.render_widget(table, centered_rect(frame.size(), 35, 35));
+            0
         }
-        _ => panic!("expected ContextMenuItem::Info"),
+        ContextMenuItem::ConstantViolations(_context_menu_constant_violations) => {
+            1
+        }
+        _ => panic!("expected ContextMenuItem::Info | ContextMenuItem::ConstantViolations"),
+    };
+    if let Some(context_menu_tabs) = build_context_menu(&menu_titles, context_menu_index) {
+        frame.render_widget(context_menu_tabs, chunks[2])
     }
 }
 
@@ -236,6 +235,7 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
             ContextMenuItem::Info(_scroll) => render_info_context,
             ContextMenuItem::NoViolationDependents(_) => render_no_violation_dependents,
             ContextMenuItem::ViolationDependents(_) => render_violation_dependents,
+            _ => panic!("unexpected active_context_menu_item"),
         },
         None => |_app: &mut App, _frame: &mut Frame, _rect: Rect| {},
     };
@@ -262,7 +262,10 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
         "Violation Dependents".to_string(),
     ];
 
-    if let Some(context_menu_tabs) = build_context_menu(app, &menu_titles) {
+    if let Some(context_menu_tabs) = build_context_menu(
+        &menu_titles,
+        app.menu_context.active_context_menu_item.into(),
+    ) {
         frame.render_widget(context_menu_tabs, chunks[2])
     }
 }
@@ -366,7 +369,7 @@ fn build_top_menu<'a>(app: &'a App<'a>) -> Tabs<'a> {
     tabs
 }
 
-fn build_context_menu<'a>(app: &App, menu_titles: &'a [String]) -> Option<Tabs<'a>> {
+fn build_context_menu(menu_titles: &[String], selected: usize) -> Option<Tabs> {
     let menu: Vec<Line> = menu_titles
         .iter()
         .map(|t| {
@@ -383,10 +386,30 @@ fn build_context_menu<'a>(app: &App, menu_titles: &'a [String]) -> Option<Tabs<'
         })
         .collect();
     let tabs = Tabs::new(menu)
-        .select(app.menu_context.active_context_menu_item.into())
+        .select(selected)
         .block(Block::default().borders(Borders::ALL))
         .style(Style::default().fg(Color::White))
         .highlight_style(Style::default().bg(Color::Gray).fg(Color::Black))
         .divider(Span::raw("|"));
     Some(tabs)
+}
+
+fn centered_rect(r: Rect, percent_x: u16, percent_y: u16) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }
