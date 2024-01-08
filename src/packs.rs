@@ -50,6 +50,14 @@ impl Default for Packs {
     }
 }
 
+pub const DEPENDENT_PACK_VIOLATION_COUNT_HEADERS: [&str; 5] = [
+    "architecture",
+    "dependency",
+    "folder_visibility",
+    "privacy",
+    "visibility",
+];
+
 impl Packs {
     pub fn get_pack_list(&mut self) -> &mut PackList {
         self.check_stale();
@@ -147,6 +155,23 @@ impl Packs {
             self.pack_dependent_violations = Some(pack_dependent_violations);
         }
         self.pack_dependent_violations.as_mut().unwrap()
+    }
+
+    pub fn get_summary(&mut self) -> Vec<(String, String)> {
+        let mut summary = vec![];
+        summary.push(("packs".to_string(), self.get_packs().len().to_string()));
+        DEPENDENT_PACK_VIOLATION_COUNT_HEADERS
+            .iter()
+            .for_each(|header| {
+                let count = self
+                    .get_pack_dependent_violations()
+                    .iter()
+                    .fold(0, |sum, violation| {
+                        sum + violation.count_for_violation_type(header)
+                    });
+                summary.push((header.to_string(), count.to_string()));
+            });
+        summary
     }
 
     pub fn check_stale(&mut self) {

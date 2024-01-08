@@ -2,9 +2,8 @@ use ratatui::widgets::block::Title;
 use ratatui::{prelude::*, widgets::*};
 use std::rc::Rc;
 
-use crate::app::{
-    ActiveFocus, App, ContextMenuItem, MenuItem, DEPENDENT_PACK_VIOLATION_COUNT_HEADERS,
-};
+use crate::app::{ActiveFocus, App, ContextMenuItem, MenuItem};
+use crate::packs::DEPENDENT_PACK_VIOLATION_COUNT_HEADERS;
 
 /// Renders the user interface widgets.
 pub fn render(app: &mut App, frame: &mut Frame) {
@@ -19,6 +18,32 @@ fn render_summary(app: &mut App, frame: &mut Frame) {
     let chunks = build_chunks(frame);
     let top_menu_tabs = build_top_menu(app);
     frame.render_widget(top_menu_tabs, chunks[0]);
+    let menu_titles = vec!["Info".to_string(), "Constant Violations".to_string()];
+
+    if let Some(context_menu_tabs) = build_context_menu(app, &menu_titles) {
+        frame.render_widget(context_menu_tabs, chunks[2])
+    }
+
+    match app.menu_context.active_context_menu_item {
+        ContextMenuItem::Info(_context_menu_info) => {
+            let lines: Vec<Line> = app
+                .packs
+                .get_summary()
+                .into_iter()
+                .map(|(key, value)| {
+                    Line::from(vec![
+                        Span::styled(format!("{}: ", key), Style::default().fg(Color::White)),
+                        Span::styled(value, Style::default().fg(Color::LightCyan)),
+                    ])
+                })
+                .collect();
+
+            let text = Text::from(lines);
+            let p = Paragraph::new(text).alignment(Alignment::Center);
+            frame.render_widget(p, chunks[1]);
+        }
+        _ => panic!("expected ContextMenuItem::Info"),
+    }
 }
 
 fn render_actions(app: &mut App, frame: &mut Frame) {

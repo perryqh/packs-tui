@@ -1,4 +1,4 @@
-use crate::packs::{PackDependentViolation, Packs};
+use crate::packs::{PackDependentViolation, Packs, DEPENDENT_PACK_VIOLATION_COUNT_HEADERS};
 use anyhow::Result;
 use tui_textarea::TextArea;
 
@@ -180,14 +180,6 @@ pub struct ContextMenuInfo {
 pub struct ContextMenuNoViolationDependents {
     pub scroll: usize,
 }
-
-pub const DEPENDENT_PACK_VIOLATION_COUNT_HEADERS: [&str; 5] = [
-    "architecture",
-    "dependency",
-    "folder_visibility",
-    "privacy",
-    "visibility",
-];
 
 pub const DEPENDENT_PACK_VIOLATION_HEADER_ABBR_TITLES: [&str; 7] =
     ["pack", "cnst", "arch", "dep", "fvis", "priv", "vis"];
