@@ -3,12 +3,13 @@ use packs::packs::pack::Pack;
 use ratatui::widgets::ListState;
 use regex::Regex;
 use std::collections::{BTreeSet, HashMap};
+use std::rc::Rc;
 
 pub struct Packs {
     pub configuration: Configuration,
     // todo: use https://github.com/notify-rs/notify
     // pub timestamp: DateTime<Utc>,
-    pub packs: Option<Vec<Pack>>,
+    pub packs: Option<Vec<Rc<Pack>>>,
     pub pack_list: Option<PackList>,
     pub pack_dependents: Option<HashMap<String, BTreeSet<String>>>,
     pub pack_dependent_violations: Option<Vec<PackDependentViolation>>,
@@ -58,14 +59,20 @@ impl Packs {
         self.pack_list.as_mut().unwrap()
     }
 
-    pub fn get_packs(&mut self) -> Vec<Pack> {
+    pub fn get_packs(&mut self) -> Vec<Rc<Pack>> {
         self.check_stale();
         if self.packs.is_none() {
-            let mut packs = self.configuration.pack_set.packs.clone();
+            let mut packs: Vec<Rc<Pack>> = self
+                .configuration
+                .pack_set
+                .packs
+                .iter()
+                .map(|p| Rc::new(p.clone()))
+                .collect();
             packs.sort_by(|a, b| a.name.cmp(&b.name));
             self.packs = Some(packs);
         }
-        self.packs.as_ref().unwrap().to_vec()
+        self.packs.as_ref().unwrap().clone()
     }
 
     pub fn get_pack_dependents(&mut self) -> HashMap<String, BTreeSet<String>> {
@@ -184,13 +191,13 @@ impl Packs {
 
 pub struct PackList {
     pub state: ListState,
-    pub items: Vec<Pack>,
+    pub items: Vec<Rc<Pack>>,
     pub filter: String,
-    filtered_items: HashMap<String, Vec<Pack>>,
+    filtered_items: HashMap<String, Vec<Rc<Pack>>>,
 }
 
 impl PackList {
-    fn with_items(items: Vec<Pack>) -> PackList {
+    fn with_items(items: Vec<Rc<Pack>>) -> PackList {
         let mut pack_list = PackList {
             state: ListState::default(),
             items,
@@ -203,14 +210,14 @@ impl PackList {
         pack_list
     }
 
-    pub fn filtered_items(&mut self) -> Vec<Pack> {
+    pub fn filtered_items(&mut self) -> Vec<Rc<Pack>> {
         let filter = self.filter.clone();
         let filter_regex = Regex::new(&filter.to_string()).unwrap();
 
         match self.filtered_items.get(&filter) {
             Some(items) => items.clone(),
             None => {
-                let filtered_items: Vec<Pack> = self
+                let filtered_items: Vec<Rc<Pack>> = self
                     .items
                     .iter()
                     .filter(|item| filter_regex.is_match(&item.name))
@@ -222,12 +229,12 @@ impl PackList {
         }
     }
 
-    pub fn selected_pack(&mut self) -> Option<Pack> {
+    pub fn selected_pack(&mut self) -> Option<Rc<Pack>> {
         match self.state.selected() {
             Some(i) => {
                 if self.filtered_items().is_empty() {
                     None
-                } else if i >= self.filtered_items.len() {
+                } else if i >= self.filtered_items().len() {
                     Some(self.filtered_items()[0].clone())
                 } else {
                     Some(self.filtered_items()[i].clone())

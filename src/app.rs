@@ -211,7 +211,7 @@ impl ContextMenuViolationDependents {
                     DEPENDENT_PACK_VIOLATION_COUNT_HEADERS[self.sort_column - 1],
                 ))
             }),
-            6 => violations.sort_by(|a, b| a.num_constants().cmp(&b.num_constants())),
+            6 => violations.sort_by_key(|a| a.num_constants()),
             _ => {}
         }
         // TODO: remove hardcoded sort direction logic

@@ -97,7 +97,7 @@ fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
         .iter()
         .skip(1)
         .for_each(|h| {
-            widths.push(Constraint::Min(h.len() as u16));
+            widths.push(Constraint::Min((h.len() + 2) as u16));
         });
     let table = Table::new(rows, widths)
         .header(header)
