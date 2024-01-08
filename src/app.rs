@@ -22,7 +22,7 @@ pub struct MenuContext<'a> {
 impl Default for MenuContext<'_> {
     fn default() -> Self {
         Self {
-            active_menu_item: MenuItem::Summary,
+            active_menu_item: MenuItem::Packs,
             active_context_menu_item: ContextMenuItem::Info(ContextMenuInfo::default()),
             active_focus: ActiveFocus::Left,
         }
@@ -145,17 +145,17 @@ impl App<'_> {
 
 #[derive(Copy, Clone, Debug)]
 pub enum MenuItem {
-    Summary,
-    Actions,
     Packs,
+    Actions,
+    Summary,
 }
 
 impl From<MenuItem> for usize {
     fn from(input: MenuItem) -> usize {
         match input {
-            MenuItem::Summary => 0,
+            MenuItem::Packs => 0,
             MenuItem::Actions => 1,
-            MenuItem::Packs => 2,
+            MenuItem::Summary => 2,
         }
     }
 }
@@ -198,6 +198,13 @@ impl ContextMenuViolationDependents {
         if self.sort_column > DEPENDENT_PACK_VIOLATION_HEADER_TITLES.len() - 1 {
             self.sort_column = 0;
         }
+
+        // TODO: remove hardcoded sort direction logic
+        if self.sort_column == 0 {
+            self.sort_direction = SortDirection::Ascending;
+        } else {
+            self.sort_direction = SortDirection::Descending;
+        }
     }
 
     pub fn sort_violations(&mut self, violations: &mut [&PackDependentViolation]) {
@@ -214,11 +221,7 @@ impl ContextMenuViolationDependents {
             6 => violations.sort_by_key(|a| a.num_constants()),
             _ => {}
         }
-        // TODO: remove hardcoded sort direction logic
-        if self.sort_column == 0 {
-            self.sort_direction = SortDirection::Ascending;
-        } else {
-            self.sort_direction = SortDirection::Descending;
+        if let SortDirection::Descending = self.sort_direction {
             violations.reverse();
         }
     }

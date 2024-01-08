@@ -322,7 +322,7 @@ fn build_chunks(frame: &mut Frame) -> Rc<[Rect]> {
 }
 
 fn build_top_menu<'a>(app: &'a App<'a>) -> Tabs<'a> {
-    let menu_titles = ["Summary", "Actions", "Packs"];
+    let menu_titles = ["Packs", "Actions", "Summary"];
     let menu = menu_titles
         .iter()
         .map(|t| {
