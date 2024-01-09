@@ -87,7 +87,7 @@ impl App<'_> {
             ActiveFocus::Right => {
                 self.menu_context.active_context_menu_item.next_scroll();
             }
-            ActiveFocus::FilterPacks(_) => {
+            ActiveFocus::Filter(_) => {
                 self.menu_context.active_focus = ActiveFocus::Left;
             }
         }
@@ -112,12 +112,12 @@ impl App<'_> {
             ActiveFocus::Right => {
                 self.menu_context.active_context_menu_item.previous_scroll();
             }
-            ActiveFocus::FilterPacks(_) => {}
+            ActiveFocus::Filter(_) => {}
         }
     }
 
     pub fn handle_tab(&mut self) {
-        if let ActiveFocus::FilterPacks(_) = self.menu_context.active_focus {
+        if let ActiveFocus::Filter(_) = self.menu_context.active_focus {
             self.menu_context.active_focus = ActiveFocus::Left;
         } else if let ContextMenuItem::ViolationDependents(ref mut violation) =
             self.menu_context.active_context_menu_item
@@ -174,12 +174,12 @@ impl App<'_> {
         self.menu_context.active_focus = ActiveFocus::Right;
     }
 
-    pub fn focus_filter_packs(&mut self) {
+    pub fn focus_filter(&mut self) {
         let text = match self.packs.pack_list {
             Some(ref pack_list) => pack_list.filter.clone(),
             None => "".to_string(),
         };
-        self.menu_context.active_focus = ActiveFocus::FilterPacks(TextArea::new(vec![text]));
+        self.menu_context.active_focus = ActiveFocus::Filter(TextArea::new(vec![text]));
     }
 }
 
@@ -201,7 +201,7 @@ impl From<MenuItem> for usize {
 }
 
 pub enum ActiveFocus<'a> {
-    FilterPacks(TextArea<'a>),
+    Filter(TextArea<'a>),
     Left,
     Right,
 }

@@ -27,7 +27,7 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
         }
         _ => {}
     }
-    if let ActiveFocus::FilterPacks(ref mut textarea) = app.menu_context.active_focus {
+    if let ActiveFocus::Filter(ref mut textarea) = app.menu_context.active_focus {
         textarea.input(key_event);
         if let Some(ref mut pack_list) = app.packs.pack_list {
             pack_list.filter = textarea.lines().join("");
@@ -47,7 +47,7 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
 
         KeyCode::Left => app.focus_left(),
         KeyCode::Right => app.focus_right(),
-        KeyCode::Char('f') => app.focus_filter_packs(),
+        KeyCode::Char('f') => app.focus_filter(),
 
         KeyCode::Up | KeyCode::Char('k') => {
             if key_event.modifiers == KeyModifiers::CONTROL {

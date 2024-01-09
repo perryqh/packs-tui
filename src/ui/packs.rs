@@ -21,7 +21,7 @@ pub fn render_packs(app: &mut App, frame: &mut Frame) {
     };
 
     match app.menu_context.active_focus {
-        ActiveFocus::Left | ActiveFocus::FilterPacks(_) => {
+        ActiveFocus::Left | ActiveFocus::Filter(_) => {
             let outer_layout = Layout::default()
                 .direction(Direction::Horizontal)
                 .constraints(vec![Constraint::Percentage(33), Constraint::Percentage(67)])
@@ -242,7 +242,7 @@ fn render_pack_list(app: &mut App, frame: &mut Frame, outer_layout: Rect) {
     frame.render_widget(filter_title_block, inner_layout[0]);
 
     match app.menu_context.active_focus {
-        ActiveFocus::FilterPacks(ref mut textarea) => {
+        ActiveFocus::Filter(ref mut textarea) => {
             textarea.set_cursor_line_style(Style::default().fg(Color::Cyan));
             textarea.set_block(Block::default().borders(Borders::ALL).fg(Color::Cyan).title("filter").title_alignment(Alignment::Right));
             textarea.set_placeholder_text("Filter by pack name");
