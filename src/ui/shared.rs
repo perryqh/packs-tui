@@ -1,6 +1,7 @@
-use crate::app::App;
+use crate::app::{ActiveFocus, App};
 use ratatui::{prelude::*, widgets::*};
 use std::rc::Rc;
+use tui_textarea::CursorMove;
 
 pub fn build_top_menu<'a>(app: &'a App<'a>) -> Tabs<'a> {
     let menu_titles = ["Packs", "Actions", "Summary"];
@@ -86,4 +87,51 @@ pub fn build_chunks(frame: &mut Frame) -> Rc<[Rect]> {
         )
         .split(frame.size());
     chunks
+}
+
+pub fn render_filter_textarea(
+    active_focus: &mut ActiveFocus,
+    frame: &mut Frame,
+    rect: Rect,
+    filter_text: &str,
+) {
+    let filter_title_block = Block::default().borders(Borders::BOTTOM);
+    frame.render_widget(filter_title_block, rect);
+
+    match active_focus {
+        ActiveFocus::Filter(ref mut textarea) => {
+            textarea.set_cursor_line_style(Style::default().fg(Color::Cyan));
+            textarea.set_block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .fg(Color::Cyan)
+                    .title("filter")
+                    .title_alignment(Alignment::Right),
+            );
+            textarea.start_selection();
+            textarea.move_cursor(CursorMove::WordForward);
+            let widget = textarea.widget();
+            frame.render_widget(widget, rect);
+        }
+        _ => {
+            let mut existing_filter = filter_text;
+            if existing_filter.is_empty() {
+                existing_filter = "ctrl-f";
+            }
+            let line = Line::from(vec![Span::styled(
+                existing_filter,
+                Style::default().fg(Color::White).bold(),
+            )]);
+
+            let paragraph = Paragraph::new(line)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("filter")
+                        .title_alignment(Alignment::Right),
+                )
+                .alignment(Alignment::Left);
+            frame.render_widget(paragraph, rect);
+        }
+    }
 }

@@ -1,10 +1,9 @@
 use ratatui::widgets::block::Title;
 use ratatui::{prelude::*, widgets::*};
-use tui_textarea::CursorMove;
 
 use crate::app::{ActiveFocus, App, ContextMenuItem};
 use crate::packs::DEPENDENT_PACK_VIOLATION_COUNT_HEADERS;
-use crate::ui::shared::{build_chunks, build_context_menu, build_top_menu};
+use crate::ui::shared::{build_chunks, build_context_menu, build_top_menu, render_filter_textarea};
 
 pub fn render_packs(app: &mut App, frame: &mut Frame) {
     let chunks = build_chunks(frame);
@@ -237,36 +236,13 @@ fn render_pack_list(app: &mut App, frame: &mut Frame, outer_layout: Rect) {
         .constraints(vec![Constraint::Length(3), Constraint::Percentage(75)])
         .margin(1)
         .split(outer_layout);
-
-    let filter_title_block = Block::default().borders(Borders::BOTTOM);
-    frame.render_widget(filter_title_block, inner_layout[0]);
-
-    match app.menu_context.active_focus {
-        ActiveFocus::Filter(ref mut textarea) => {
-            textarea.set_cursor_line_style(Style::default().fg(Color::Cyan));
-            textarea.set_block(Block::default().borders(Borders::ALL).fg(Color::Cyan).title("filter").title_alignment(Alignment::Right));
-            textarea.set_placeholder_text("Filter by pack name");
-            textarea.start_selection();
-            textarea.move_cursor(CursorMove::WordForward);
-            let widget = textarea.widget();
-            frame.render_widget(widget, inner_layout[0]);
-        }
-        _ => {
-            if let Some(ref mut pack_list) = app.packs.pack_list {
-                let mut existing_filter = pack_list.filter.clone();
-                if existing_filter.is_empty() {
-                    existing_filter = "ctrl-f".to_string();
-                }
-                let line = Line::from(vec![
-                    Span::styled(existing_filter, Style::default().fg(Color::White).bold()),
-                ]);
-
-                let paragraph = Paragraph::new(line)
-                    .block(Block::default().borders(Borders::ALL).title("filter").title_alignment(Alignment::Right))
-                    .alignment(Alignment::Left);
-                frame.render_widget(paragraph, inner_layout[0]);
-            }
-        }
+    if let Some(ref mut pack_list) = app.packs.pack_list {
+        render_filter_textarea(
+            &mut app.menu_context.active_focus,
+            frame,
+            inner_layout[0],
+            &pack_list.filter,
+        );
     }
 
     let list_items: Vec<ListItem> = filtered_packs
