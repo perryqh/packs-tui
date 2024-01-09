@@ -1,7 +1,6 @@
 use packs::packs::configuration::Configuration;
 use packs::packs::pack::Pack;
 use ratatui::widgets::ListState;
-use regex::Regex;
 use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 
@@ -302,7 +301,6 @@ impl PackList {
 
     pub fn filtered_items(&mut self) -> Vec<Rc<Pack>> {
         let filter = self.filter.clone();
-        let filter_regex = Regex::new(&filter.to_string()).unwrap();
 
         match self.filtered_items.get(&filter) {
             Some(items) => items.clone(),
@@ -310,7 +308,7 @@ impl PackList {
                 let filtered_items: Vec<Rc<Pack>> = self
                     .items
                     .iter()
-                    .filter(|item| filter_regex.is_match(&item.name))
+                    .filter(|item| item.name.contains(&filter))
                     .cloned()
                     .collect();
                 self.filtered_items.insert(filter, filtered_items.clone());

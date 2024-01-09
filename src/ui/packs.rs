@@ -1,5 +1,6 @@
 use ratatui::widgets::block::Title;
 use ratatui::{prelude::*, widgets::*};
+use tui_textarea::CursorMove;
 
 use crate::app::{ActiveFocus, App, ContextMenuItem};
 use crate::packs::DEPENDENT_PACK_VIOLATION_COUNT_HEADERS;
@@ -98,11 +99,11 @@ fn render_violation_dependents(app: &mut App, frame: &mut Frame, rect: Rect) {
         let height = 1;
         let mut cells = vec![];
         cells.push(Cell::from(violation.referencing_pack_name.clone()));
+        cells.push(Cell::from(violation.num_constants().to_string()));
         for key in DEPENDENT_PACK_VIOLATION_COUNT_HEADERS {
             let count = violation.count_for_violation_type(key);
             cells.push(Cell::from(count.to_string()));
         }
-        cells.push(Cell::from(violation.num_constants().to_string()));
         Row::new(cells).height(height as u16)
     });
     let max_len: usize = violations
@@ -233,7 +234,7 @@ fn render_pack_list(app: &mut App, frame: &mut Frame, outer_layout: Rect) {
 
     let inner_layout = Layout::default()
         .direction(Direction::Vertical)
-        .constraints(vec![Constraint::Length(2), Constraint::Percentage(75)])
+        .constraints(vec![Constraint::Length(3), Constraint::Percentage(75)])
         .margin(1)
         .split(outer_layout);
 
@@ -242,8 +243,11 @@ fn render_pack_list(app: &mut App, frame: &mut Frame, outer_layout: Rect) {
 
     match app.menu_context.active_focus {
         ActiveFocus::FilterPacks(ref mut textarea) => {
-            textarea.set_cursor_line_style(Style::default());
+            textarea.set_cursor_line_style(Style::default().fg(Color::Cyan));
+            textarea.set_block(Block::default().borders(Borders::ALL).fg(Color::Cyan).title("filter").title_alignment(Alignment::Right));
             textarea.set_placeholder_text("Filter by pack name");
+            textarea.start_selection();
+            textarea.move_cursor(CursorMove::WordForward);
             let widget = textarea.widget();
             frame.render_widget(widget, inner_layout[0]);
         }
@@ -254,12 +258,11 @@ fn render_pack_list(app: &mut App, frame: &mut Frame, outer_layout: Rect) {
                     existing_filter = "ctrl-f".to_string();
                 }
                 let line = Line::from(vec![
-                    Span::styled("Filter: ", Style::default().fg(Color::Gray)),
                     Span::styled(existing_filter, Style::default().fg(Color::White).bold()),
                 ]);
 
                 let paragraph = Paragraph::new(line)
-                    // .style(Style::new().white().on_light_magenta())
+                    .block(Block::default().borders(Borders::ALL).title("filter").title_alignment(Alignment::Right))
                     .alignment(Alignment::Left);
                 frame.render_widget(paragraph, inner_layout[0]);
             }

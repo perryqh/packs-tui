@@ -325,15 +325,15 @@ impl ContextMenuViolationDependents {
     pub fn sort_violations(&mut self, violations: &mut [&PackDependentViolation]) {
         match self.sort_column {
             0 => violations.sort_by(|a, b| a.defining_pack_name.cmp(&b.defining_pack_name)),
-            1..=5 => violations.sort_by(|a, b| {
+            2..=6 => violations.sort_by(|a, b| {
                 a.count_for_violation_type(
-                    DEPENDENT_PACK_VIOLATION_COUNT_HEADERS[self.sort_column - 1],
+                    DEPENDENT_PACK_VIOLATION_COUNT_HEADERS[self.sort_column - 2],
                 )
                 .cmp(&b.count_for_violation_type(
-                    DEPENDENT_PACK_VIOLATION_COUNT_HEADERS[self.sort_column - 1],
+                    DEPENDENT_PACK_VIOLATION_COUNT_HEADERS[self.sort_column - 2],
                 ))
             }),
-            6 => violations.sort_by_key(|a| a.num_constants()),
+            1 => violations.sort_by_key(|a| a.num_constants()),
             _ => {}
         }
         if let SortDirection::Descending = self.sort_direction {
