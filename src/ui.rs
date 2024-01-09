@@ -96,12 +96,8 @@ fn render_context_menu_constant_violations(app: &mut App, frame: &mut Frame, rec
 
         Row::new(cells).height(height as u16)
     });
-    let max_constant_length: usize = violations
-        .iter()
-        .map(|violation| violation.constant.len())
-        .max()
-        .unwrap_or(0);
-    let mut widths = vec![Constraint::Length(max_constant_length as u16)];
+
+    let mut widths = vec![Constraint::Percentage(50)];
     header_titles
         .iter()
         .skip(1)
