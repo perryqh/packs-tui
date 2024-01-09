@@ -39,7 +39,7 @@ impl ConstantSummary {
         }
     }
 
-    pub(crate) fn referencing_pack_count(&self) -> usize {
+    pub(crate) fn referencing_pack_count_length(&self) -> usize {
         self.referencing_pack_counts.len()
     }
 }

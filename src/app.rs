@@ -60,6 +60,14 @@ impl App<'_> {
         self.packs.unselect_pack_list();
     }
 
+    pub fn sort_descending(&mut self) {
+        self.menu_context.active_context_menu_item.sort_descending();
+    }
+
+    pub fn sort_ascending(&mut self) {
+        self.menu_context.active_context_menu_item.sort_ascending();
+    }
+
     pub fn next(&mut self) {
         match self.menu_context.active_focus {
             ActiveFocus::Left => match self.menu_context.active_menu_item {
@@ -275,8 +283,11 @@ impl ContextMenuConstantViolations {
                 a.count_for_violation_type(CONSTANT_VIOLATION_COLUMNS[self.sort_column])
                     .cmp(&b.count_for_violation_type(CONSTANT_VIOLATION_COLUMNS[self.sort_column]))
             }),
-            7 => violations.sort_by_key(|a| a.referencing_pack_count()),
+            7 => violations.sort_by_key(|a| a.referencing_pack_count_length()),
             _ => {}
+        }
+        if let SortDirection::Descending = self.sort_direction {
+            violations.reverse();
         }
     }
 }
@@ -286,13 +297,6 @@ impl ContextMenuViolationDependents {
         self.sort_column += 1;
         if self.sort_column > DEPENDENT_PACK_VIOLATION_HEADER_ABBR_TITLES.len() - 1 {
             self.sort_column = 0;
-        }
-
-        // TODO: remove hardcoded sort direction logic
-        if self.sort_column == 0 {
-            self.sort_direction = SortDirection::Ascending;
-        } else {
-            self.sort_direction = SortDirection::Descending;
         }
     }
 
@@ -434,6 +438,32 @@ impl ContextMenuItem {
                 if violation.scroll > 0 {
                     violation.scroll -= 1;
                 }
+            }
+        }
+    }
+
+    pub fn sort_ascending(&mut self) {
+        match self {
+            ContextMenuItem::Info(_) => {}
+            ContextMenuItem::NoViolationDependents(_) => {}
+            ContextMenuItem::ViolationDependents(violation) => {
+                violation.sort_direction = SortDirection::Ascending;
+            }
+            ContextMenuItem::ConstantViolations(violation) => {
+                violation.sort_direction = SortDirection::Ascending;
+            }
+        }
+    }
+
+    pub fn sort_descending(&mut self) {
+        match self {
+            ContextMenuItem::Info(_) => {}
+            ContextMenuItem::NoViolationDependents(_) => {}
+            ContextMenuItem::ViolationDependents(violation) => {
+                violation.sort_direction = SortDirection::Descending;
+            }
+            ContextMenuItem::ConstantViolations(violation) => {
+                violation.sort_direction = SortDirection::Descending;
             }
         }
     }

@@ -21,7 +21,11 @@ fn render_summary(app: &mut App, frame: &mut Frame) {
     let menu_titles = vec!["Info".to_string(), "Constant Violations".to_string()];
 
     let context_menu_index = match app.menu_context.active_context_menu_item {
-        ContextMenuItem::Info(_context_menu_info) => {
+        ContextMenuItem::ConstantViolations(_) => {
+            render_context_menu_constant_violations(app, frame, chunks[1]);
+            1
+        }
+        _ => {
             let widths = [Constraint::Length(30), Constraint::Length(5)];
             let rows = app.packs.get_summary().into_iter().map(|(key, value)| {
                 Row::new(vec![
@@ -32,14 +36,9 @@ fn render_summary(app: &mut App, frame: &mut Frame) {
             });
             let table = Table::new(rows, widths).column_spacing(3);
 
-            frame.render_widget(table, centered_rect(frame.size(), 35, 35));
+            frame.render_widget(table, centered_rect(frame.size(), 55, 55));
             0
         }
-        ContextMenuItem::ConstantViolations(_) => {
-            render_context_menu_constant_violations(app, frame, chunks[1]);
-            1
-        }
-        _ => panic!("expected ContextMenuItem::Info | ContextMenuItem::ConstantViolations"),
     };
     if let Some(context_menu_tabs) = build_context_menu(&menu_titles, context_menu_index) {
         frame.render_widget(context_menu_tabs, chunks[2])
@@ -84,11 +83,15 @@ fn render_context_menu_constant_violations(app: &mut App, frame: &mut Frame, rec
         let mut cells = vec![];
         cells.push(Cell::from(violation.constant.clone()));
         cells.push(Cell::from(violation.count.to_string()));
-        CONSTANT_VIOLATION_COLUMNS.iter().skip(2).for_each(|key| {
-            let count = violation.count_for_violation_type(key);
-            cells.push(Cell::from(count.to_string()));
-        });
-        let total_referencing_packs: usize = violation.referencing_pack_counts.len();
+        CONSTANT_VIOLATION_COLUMNS
+            .iter()
+            .skip(2)
+            .take(5)
+            .for_each(|key| {
+                let count = violation.count_for_violation_type(key);
+                cells.push(Cell::from(count.to_string()));
+            });
+        let total_referencing_packs: usize = violation.referencing_pack_count_length();
         cells.push(Cell::from(total_referencing_packs.to_string()));
 
         Row::new(cells).height(height as u16)
@@ -318,10 +321,9 @@ fn render_packs(app: &mut App, frame: &mut Frame) {
 
     let funny = match app.packs.get_pack_list().selected_pack() {
         Some(_pack) => match app.menu_context.active_context_menu_item {
-            ContextMenuItem::Info(_scroll) => render_info_context,
             ContextMenuItem::NoViolationDependents(_) => render_no_violation_dependents,
             ContextMenuItem::ViolationDependents(_) => render_violation_dependents,
-            _ => panic!("unexpected active_context_menu_item"),
+            _ => render_info_context,
         },
         None => |_app: &mut App, _frame: &mut Frame, _rect: Rect| {},
     };
