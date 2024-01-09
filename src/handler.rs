@@ -18,7 +18,11 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
             return Ok(());
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            app.next();
+            if key_event.modifiers == KeyModifiers::CONTROL {
+                app.sort_descending();
+            } else {
+                app.next();
+            }
             return Ok(());
         }
         _ => {}
@@ -45,9 +49,16 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
         KeyCode::Right => app.focus_right(),
         KeyCode::Char('f') => app.focus_filter_packs(),
 
-        KeyCode::Up | KeyCode::Char('k') => app.previous(),
+        KeyCode::Up | KeyCode::Char('k') => {
+            if key_event.modifiers == KeyModifiers::CONTROL {
+                app.sort_ascending();
+            } else {
+                app.previous();
+            }
+        }
 
         // Content menu handlers
+        KeyCode::Char('c') => app.handle_context_menu_c(),
         KeyCode::Char('d') => app.handle_context_menu_d(),
         KeyCode::Char('v') => app.handle_context_menu_v(),
         KeyCode::Char('i') => app.handle_context_menu_i(),

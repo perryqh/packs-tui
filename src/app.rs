@@ -1,5 +1,8 @@
-use crate::packs::{PackDependentViolation, Packs};
+use crate::packs::{
+    ConstantSummary, PackDependentViolation, Packs, DEPENDENT_PACK_VIOLATION_COUNT_HEADERS,
+};
 use anyhow::Result;
+use std::rc::Rc;
 use tui_textarea::TextArea;
 
 /// Application result type.
@@ -57,31 +60,55 @@ impl App<'_> {
         self.packs.unselect_pack_list();
     }
 
+    pub fn sort_descending(&mut self) {
+        self.menu_context.active_context_menu_item.sort_descending();
+    }
+
+    pub fn sort_ascending(&mut self) {
+        self.menu_context.active_context_menu_item.sort_ascending();
+    }
+
     pub fn next(&mut self) {
-        if let ActiveFocus::FilterPacks(_) = self.menu_context.active_focus {
-            self.menu_context.active_focus = ActiveFocus::Left;
-        } else {
-            match self.menu_context.active_focus {
-                ActiveFocus::Left => {
+        match self.menu_context.active_focus {
+            ActiveFocus::Left => match self.menu_context.active_menu_item {
+                MenuItem::Packs => {
                     self.menu_context.active_context_menu_item.reset_scroll();
                     self.packs.next_pack_list();
                 }
-                ActiveFocus::Right => {
-                    self.menu_context.active_context_menu_item.next_scroll();
+                MenuItem::Actions => {}
+                MenuItem::Summary => {
+                    if let ContextMenuItem::ConstantViolations(_) =
+                        self.menu_context.active_context_menu_item
+                    {
+                        self.menu_context.active_context_menu_item.next_scroll();
+                    }
                 }
-                ActiveFocus::FilterPacks(_) => {
-                    self.menu_context.active_focus = ActiveFocus::Left;
-                }
+            },
+            ActiveFocus::Right => {
+                self.menu_context.active_context_menu_item.next_scroll();
+            }
+            ActiveFocus::FilterPacks(_) => {
+                self.menu_context.active_focus = ActiveFocus::Left;
             }
         }
     }
 
     pub fn previous(&mut self) {
         match self.menu_context.active_focus {
-            ActiveFocus::Left => {
-                self.menu_context.active_context_menu_item.reset_scroll();
-                self.packs.previous_pack_list();
-            }
+            ActiveFocus::Left => match self.menu_context.active_menu_item {
+                MenuItem::Packs => {
+                    self.menu_context.active_context_menu_item.reset_scroll();
+                    self.packs.previous_pack_list();
+                }
+                MenuItem::Actions => {}
+                MenuItem::Summary => {
+                    if let ContextMenuItem::ConstantViolations(_) =
+                        self.menu_context.active_context_menu_item
+                    {
+                        self.menu_context.active_context_menu_item.previous_scroll();
+                    }
+                }
+            },
             ActiveFocus::Right => {
                 self.menu_context.active_context_menu_item.previous_scroll();
             }
@@ -96,15 +123,23 @@ impl App<'_> {
             self.menu_context.active_context_menu_item
         {
             violation.next_sort_column();
+        } else if let ContextMenuItem::ConstantViolations(ref mut violation) =
+            self.menu_context.active_context_menu_item
+        {
+            violation.next_sort_column();
         }
     }
 
     pub fn handle_top_menu_s(&mut self) {
         self.menu_context.active_menu_item = MenuItem::Summary;
+        self.menu_context.active_context_menu_item =
+            ContextMenuItem::Info(ContextMenuInfo::default());
     }
 
     pub fn handle_top_menu_p(&mut self) {
         self.menu_context.active_menu_item = MenuItem::Packs;
+        self.menu_context.active_context_menu_item =
+            ContextMenuItem::Info(ContextMenuInfo::default());
     }
 
     pub fn handle_top_menu_a(&mut self) {
@@ -114,6 +149,11 @@ impl App<'_> {
     pub fn handle_context_menu_d(&mut self) {
         self.menu_context.active_context_menu_item =
             ContextMenuItem::NoViolationDependents(ContextMenuNoViolationDependents::default());
+    }
+
+    pub fn handle_context_menu_c(&mut self) {
+        self.menu_context.active_context_menu_item =
+            ContextMenuItem::ConstantViolations(ContextMenuConstantViolations::default());
     }
 
     pub fn handle_context_menu_v(&mut self) {
@@ -176,35 +216,110 @@ pub enum SortDirection {
 pub struct ContextMenuInfo {
     pub scroll: usize,
 }
+
 #[derive(Copy, Clone, Debug, Default)]
 pub struct ContextMenuNoViolationDependents {
     pub scroll: usize,
 }
 
-pub const DEPENDENT_PACK_VIOLATION_COUNT_HEADERS: [&str; 5] = [
+pub const DEPENDENT_PACK_VIOLATION_HEADER_ABBR_TITLES: [&str; 7] =
+    ["pack", "cnst", "arch", "dep", "fvis", "priv", "vis"];
+pub const DEPENDENT_PACK_VIOLATION_HEADER_FULL_TITLES: [&str; 7] = [
+    "pack",
+    "constant",
     "architecture",
     "dependency",
-    "folder_visibility",
+    "folder visibility",
     "privacy",
     "visibility",
 ];
 
-pub const DEPENDENT_PACK_VIOLATION_HEADER_TITLES: [&str; 7] =
-    ["pack", "cnst", "arch", "dep", "fvis", "priv", "vis"];
+pub const CONSTANT_VIOLATION_COLUMNS: [&str; 8] = [
+    "constant",
+    "count",
+    "architecture",
+    "dependency",
+    "folder visibility",
+    "privacy",
+    "visibility",
+    "ref packs",
+];
+
+impl ContextMenuConstantViolations {
+    pub fn next_sort_column(&mut self) {
+        self.sort_column += 1;
+        if self.sort_column > CONSTANT_VIOLATION_COLUMNS.len() - 1 {
+            self.sort_column = 0;
+        }
+    }
+
+    pub fn header_titles(&mut self) -> Vec<String> {
+        CONSTANT_VIOLATION_COLUMNS
+            .iter()
+            .enumerate()
+            .map(|(i, title)| {
+                if i == self.sort_column {
+                    format!(
+                        "{} {}",
+                        if self.sort_direction == SortDirection::Descending {
+                            "▲"
+                        } else {
+                            "▼"
+                        },
+                        title
+                    )
+                } else {
+                    title.to_string()
+                }
+            })
+            .collect::<Vec<String>>()
+    }
+
+    pub(crate) fn sort_violations(&mut self, violations: &mut [Rc<ConstantSummary>]) {
+        match self.sort_column {
+            0 => violations.sort_by(|a, b| a.constant.cmp(&b.constant)),
+            1 => violations.sort_by(|a, b| a.count.cmp(&b.count)),
+            2..=6 => violations.sort_by(|a, b| {
+                a.count_for_violation_type(CONSTANT_VIOLATION_COLUMNS[self.sort_column])
+                    .cmp(&b.count_for_violation_type(CONSTANT_VIOLATION_COLUMNS[self.sort_column]))
+            }),
+            7 => violations.sort_by_key(|a| a.referencing_pack_count_length()),
+            _ => {}
+        }
+        if let SortDirection::Descending = self.sort_direction {
+            violations.reverse();
+        }
+    }
+}
 
 impl ContextMenuViolationDependents {
     pub fn next_sort_column(&mut self) {
         self.sort_column += 1;
-        if self.sort_column > DEPENDENT_PACK_VIOLATION_HEADER_TITLES.len() - 1 {
+        if self.sort_column > DEPENDENT_PACK_VIOLATION_HEADER_ABBR_TITLES.len() - 1 {
             self.sort_column = 0;
         }
+    }
 
-        // TODO: remove hardcoded sort direction logic
-        if self.sort_column == 0 {
-            self.sort_direction = SortDirection::Ascending;
-        } else {
-            self.sort_direction = SortDirection::Descending;
-        }
+    pub fn header_titles(&mut self) -> Vec<String> {
+        DEPENDENT_PACK_VIOLATION_HEADER_ABBR_TITLES
+            .iter()
+            .enumerate()
+            .map(|(i, title)| {
+                if i == self.sort_column {
+                    format!(
+                        "{} {}",
+                        if self.sort_direction == SortDirection::Descending {
+                            "▲"
+                        } else {
+                            "▼"
+                        },
+                        DEPENDENT_PACK_VIOLATION_HEADER_FULL_TITLES[i]
+                    )
+                } else {
+                    title.to_string()
+                }
+            })
+            .collect::<Vec<String>>()
     }
 
     pub fn sort_violations(&mut self, violations: &mut [&PackDependentViolation]) {
@@ -226,20 +341,40 @@ impl ContextMenuViolationDependents {
         }
     }
 }
+
 #[derive(Copy, Clone, Debug)]
 pub struct ContextMenuViolationDependents {
     pub scroll: usize,
     pub sort_column: usize,
     pub sort_direction: SortDirection,
 }
+
+#[derive(Copy, Clone, Debug)]
+pub struct ContextMenuConstantViolations {
+    pub scroll: usize,
+    pub sort_column: usize,
+    pub sort_direction: SortDirection,
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum ContextMenuItem {
     Info(ContextMenuInfo),
     NoViolationDependents(ContextMenuNoViolationDependents),
     ViolationDependents(ContextMenuViolationDependents),
+    ConstantViolations(ContextMenuConstantViolations),
 }
 
 impl Default for ContextMenuViolationDependents {
+    fn default() -> Self {
+        Self {
+            scroll: 0,
+            sort_column: 0,
+            sort_direction: SortDirection::Ascending,
+        }
+    }
+}
+
+impl Default for ContextMenuConstantViolations {
     fn default() -> Self {
         Self {
             scroll: 0,
@@ -255,6 +390,9 @@ impl ContextMenuItem {
             ContextMenuItem::Info(info) => info.scroll = s,
             ContextMenuItem::NoViolationDependents(no_violation) => no_violation.scroll = s,
             ContextMenuItem::ViolationDependents(violation) => violation.scroll = s,
+            ContextMenuItem::ConstantViolations(constant_violations) => {
+                constant_violations.scroll = s
+            }
         }
     }
     pub fn scroll(&self) -> usize {
@@ -262,6 +400,7 @@ impl ContextMenuItem {
             ContextMenuItem::Info(info) => info.scroll,
             ContextMenuItem::NoViolationDependents(no_violation) => no_violation.scroll,
             ContextMenuItem::ViolationDependents(violation) => violation.scroll,
+            ContextMenuItem::ConstantViolations(violation) => violation.scroll,
         }
     }
 
@@ -273,9 +412,8 @@ impl ContextMenuItem {
         match self {
             ContextMenuItem::Info(info) => info.scroll += 1,
             ContextMenuItem::NoViolationDependents(no_violation) => no_violation.scroll += 1,
-            ContextMenuItem::ViolationDependents(violation) => {
-                violation.scroll += 1;
-            }
+            ContextMenuItem::ViolationDependents(violation) => violation.scroll += 1,
+            ContextMenuItem::ConstantViolations(violation) => violation.scroll += 1,
         }
     }
 
@@ -296,6 +434,37 @@ impl ContextMenuItem {
                     violation.scroll -= 1;
                 }
             }
+            ContextMenuItem::ConstantViolations(violation) => {
+                if violation.scroll > 0 {
+                    violation.scroll -= 1;
+                }
+            }
+        }
+    }
+
+    pub fn sort_ascending(&mut self) {
+        match self {
+            ContextMenuItem::Info(_) => {}
+            ContextMenuItem::NoViolationDependents(_) => {}
+            ContextMenuItem::ViolationDependents(violation) => {
+                violation.sort_direction = SortDirection::Ascending;
+            }
+            ContextMenuItem::ConstantViolations(violation) => {
+                violation.sort_direction = SortDirection::Ascending;
+            }
+        }
+    }
+
+    pub fn sort_descending(&mut self) {
+        match self {
+            ContextMenuItem::Info(_) => {}
+            ContextMenuItem::NoViolationDependents(_) => {}
+            ContextMenuItem::ViolationDependents(violation) => {
+                violation.sort_direction = SortDirection::Descending;
+            }
+            ContextMenuItem::ConstantViolations(violation) => {
+                violation.sort_direction = SortDirection::Descending;
+            }
         }
     }
 }
@@ -306,6 +475,7 @@ impl From<ContextMenuItem> for usize {
             ContextMenuItem::Info(_) => 0,
             ContextMenuItem::NoViolationDependents(_) => 1,
             ContextMenuItem::ViolationDependents(_) => 2,
+            ContextMenuItem::ConstantViolations(_) => 3,
         }
     }
 }

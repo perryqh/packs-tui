@@ -13,6 +13,7 @@ pub struct Packs {
     pub pack_list: Option<PackList>,
     pub pack_dependents: Option<HashMap<String, BTreeSet<String>>>,
     pub pack_dependent_violations: Option<Vec<PackDependentViolation>>,
+    pub constant_summaries: Option<Vec<Rc<ConstantSummary>>>,
 }
 
 pub struct PackDependentViolation {
@@ -20,6 +21,27 @@ pub struct PackDependentViolation {
     pub referencing_pack_name: String,
     pub violation_type_counts: HashMap<String, usize>,
     pub constant_counts: HashMap<String, usize>,
+}
+
+pub struct ConstantSummary {
+    pub defining_pack_name: String,
+    pub constant: String,
+    pub count: usize,
+    pub violation_type_counts: HashMap<String, usize>,
+    pub referencing_pack_counts: HashMap<String, usize>,
+}
+
+impl ConstantSummary {
+    pub fn count_for_violation_type(&self, violation_type: &str) -> usize {
+        match self.violation_type_counts.get(violation_type) {
+            Some(count) => *count,
+            None => 0,
+        }
+    }
+
+    pub(crate) fn referencing_pack_count_length(&self) -> usize {
+        self.referencing_pack_counts.len()
+    }
 }
 
 impl PackDependentViolation {
@@ -41,6 +63,7 @@ impl Default for Packs {
         // let timestamp = configuration.pack_set.timestamp();
         Packs {
             configuration,
+            constant_summaries: None,
             // timestamp,
             packs: None,
             pack_list: None,
@@ -49,6 +72,14 @@ impl Default for Packs {
         }
     }
 }
+
+pub const DEPENDENT_PACK_VIOLATION_COUNT_HEADERS: [&str; 5] = [
+    "architecture",
+    "dependency",
+    "folder_visibility",
+    "privacy",
+    "visibility",
+];
 
 impl Packs {
     pub fn get_pack_list(&mut self) -> &mut PackList {
@@ -147,6 +178,65 @@ impl Packs {
             self.pack_dependent_violations = Some(pack_dependent_violations);
         }
         self.pack_dependent_violations.as_mut().unwrap()
+    }
+
+    pub fn get_summary(&mut self) -> Vec<(String, String)> {
+        let mut summary = vec![];
+        summary.push(("packs".to_string(), self.get_packs().len().to_string()));
+        DEPENDENT_PACK_VIOLATION_COUNT_HEADERS
+            .iter()
+            .for_each(|header| {
+                let count = self
+                    .get_pack_dependent_violations()
+                    .iter()
+                    .fold(0, |sum, violation| {
+                        sum + violation.count_for_violation_type(header)
+                    });
+                summary.push((format!("{} violations", header), count.to_string()));
+            });
+        summary
+    }
+
+    pub fn get_constant_summaries(&mut self) -> Vec<Rc<ConstantSummary>> {
+        self.check_stale();
+        if self.constant_summaries.is_none() {
+            let mut constant_summaries: HashMap<(String, String), ConstantSummary> =
+                self.configuration.pack_set.all_violations.iter().fold(
+                    HashMap::new(),
+                    |mut map, violation| {
+                        let defining_pack_name = violation.defining_pack_name.clone();
+                        let constant = violation.constant_name.clone();
+                        let key = (defining_pack_name.clone(), constant.clone());
+                        let entry = map.entry(key).or_insert(ConstantSummary {
+                            defining_pack_name,
+                            constant,
+                            count: 0,
+                            referencing_pack_counts: HashMap::new(),
+                            violation_type_counts: HashMap::new(),
+                        });
+                        entry.count += 1;
+                        entry
+                            .referencing_pack_counts
+                            .entry(violation.referencing_pack_name.clone())
+                            .and_modify(|count| *count += 1)
+                            .or_insert(1);
+                        entry
+                            .violation_type_counts
+                            .entry(violation.violation_type.clone())
+                            .and_modify(|count| *count += 1)
+                            .or_insert(1);
+                        map
+                    },
+                );
+
+            self.constant_summaries = Some(
+                constant_summaries
+                    .drain()
+                    .map(|(_, v)| Rc::new(v))
+                    .collect(),
+            );
+        }
+        self.constant_summaries.as_ref().unwrap().clone()
     }
 
     pub fn check_stale(&mut self) {
