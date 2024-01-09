@@ -23,12 +23,25 @@ pub struct PackDependentViolation {
     pub constant_counts: HashMap<String, usize>,
 }
 
-// Vec<(String /*constant*/, usize /*count*/, usize /*num packs*/,> {
 pub struct ConstantSummary {
     pub defining_pack_name: String,
     pub constant: String,
     pub count: usize,
+    pub violation_type_counts: HashMap<String, usize>,
     pub referencing_pack_counts: HashMap<String, usize>,
+}
+
+impl ConstantSummary {
+    pub fn count_for_violation_type(&self, violation_type: &str) -> usize {
+        match self.violation_type_counts.get(violation_type) {
+            Some(count) => *count,
+            None => 0,
+        }
+    }
+
+    pub(crate) fn referencing_pack_count(&self) -> usize {
+        self.referencing_pack_counts.len()
+    }
 }
 
 impl PackDependentViolation {
@@ -199,11 +212,17 @@ impl Packs {
                             constant,
                             count: 0,
                             referencing_pack_counts: HashMap::new(),
+                            violation_type_counts: HashMap::new(),
                         });
                         entry.count += 1;
                         entry
                             .referencing_pack_counts
                             .entry(violation.referencing_pack_name.clone())
+                            .and_modify(|count| *count += 1)
+                            .or_insert(1);
+                        entry
+                            .violation_type_counts
+                            .entry(violation.violation_type.clone())
                             .and_modify(|count| *count += 1)
                             .or_insert(1);
                         map

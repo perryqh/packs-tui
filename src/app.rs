@@ -1,5 +1,8 @@
-use crate::packs::{PackDependentViolation, Packs, DEPENDENT_PACK_VIOLATION_COUNT_HEADERS};
+use crate::packs::{
+    ConstantSummary, PackDependentViolation, Packs, DEPENDENT_PACK_VIOLATION_COUNT_HEADERS,
+};
 use anyhow::Result;
+use std::rc::Rc;
 use tui_textarea::TextArea;
 
 /// Application result type.
@@ -58,30 +61,46 @@ impl App<'_> {
     }
 
     pub fn next(&mut self) {
-        if let ActiveFocus::FilterPacks(_) = self.menu_context.active_focus {
-            self.menu_context.active_focus = ActiveFocus::Left;
-        } else {
-            match self.menu_context.active_focus {
-                ActiveFocus::Left => {
+        match self.menu_context.active_focus {
+            ActiveFocus::Left => match self.menu_context.active_menu_item {
+                MenuItem::Packs => {
                     self.menu_context.active_context_menu_item.reset_scroll();
                     self.packs.next_pack_list();
                 }
-                ActiveFocus::Right => {
-                    self.menu_context.active_context_menu_item.next_scroll();
+                MenuItem::Actions => {}
+                MenuItem::Summary => {
+                    if let ContextMenuItem::ConstantViolations(_) =
+                        self.menu_context.active_context_menu_item
+                    {
+                        self.menu_context.active_context_menu_item.next_scroll();
+                    }
                 }
-                ActiveFocus::FilterPacks(_) => {
-                    self.menu_context.active_focus = ActiveFocus::Left;
-                }
+            },
+            ActiveFocus::Right => {
+                self.menu_context.active_context_menu_item.next_scroll();
+            }
+            ActiveFocus::FilterPacks(_) => {
+                self.menu_context.active_focus = ActiveFocus::Left;
             }
         }
     }
 
     pub fn previous(&mut self) {
         match self.menu_context.active_focus {
-            ActiveFocus::Left => {
-                self.menu_context.active_context_menu_item.reset_scroll();
-                self.packs.previous_pack_list();
-            }
+            ActiveFocus::Left => match self.menu_context.active_menu_item {
+                MenuItem::Packs => {
+                    self.menu_context.active_context_menu_item.reset_scroll();
+                    self.packs.previous_pack_list();
+                }
+                MenuItem::Actions => {}
+                MenuItem::Summary => {
+                    if let ContextMenuItem::ConstantViolations(_) =
+                        self.menu_context.active_context_menu_item
+                    {
+                        self.menu_context.active_context_menu_item.previous_scroll();
+                    }
+                }
+            },
             ActiveFocus::Right => {
                 self.menu_context.active_context_menu_item.previous_scroll();
             }
@@ -96,15 +115,23 @@ impl App<'_> {
             self.menu_context.active_context_menu_item
         {
             violation.next_sort_column();
+        } else if let ContextMenuItem::ConstantViolations(ref mut violation) =
+            self.menu_context.active_context_menu_item
+        {
+            violation.next_sort_column();
         }
     }
 
     pub fn handle_top_menu_s(&mut self) {
         self.menu_context.active_menu_item = MenuItem::Summary;
+        self.menu_context.active_context_menu_item =
+            ContextMenuItem::Info(ContextMenuInfo::default());
     }
 
     pub fn handle_top_menu_p(&mut self) {
         self.menu_context.active_menu_item = MenuItem::Packs;
+        self.menu_context.active_context_menu_item =
+            ContextMenuItem::Info(ContextMenuInfo::default());
     }
 
     pub fn handle_top_menu_a(&mut self) {
@@ -181,6 +208,7 @@ pub enum SortDirection {
 pub struct ContextMenuInfo {
     pub scroll: usize,
 }
+
 #[derive(Copy, Clone, Debug, Default)]
 pub struct ContextMenuNoViolationDependents {
     pub scroll: usize,
@@ -197,6 +225,61 @@ pub const DEPENDENT_PACK_VIOLATION_HEADER_FULL_TITLES: [&str; 7] = [
     "privacy",
     "visibility",
 ];
+
+pub const CONSTANT_VIOLATION_COLUMNS: [&str; 8] = [
+    "constant",
+    "count",
+    "architecture",
+    "dependency",
+    "folder visibility",
+    "privacy",
+    "visibility",
+    "ref packs",
+];
+
+impl ContextMenuConstantViolations {
+    pub fn next_sort_column(&mut self) {
+        self.sort_column += 1;
+        if self.sort_column > CONSTANT_VIOLATION_COLUMNS.len() - 1 {
+            self.sort_column = 0;
+        }
+    }
+
+    pub fn header_titles(&mut self) -> Vec<String> {
+        CONSTANT_VIOLATION_COLUMNS
+            .iter()
+            .enumerate()
+            .map(|(i, title)| {
+                if i == self.sort_column {
+                    format!(
+                        "{} {}",
+                        if self.sort_direction == SortDirection::Descending {
+                            "▲"
+                        } else {
+                            "▼"
+                        },
+                        title
+                    )
+                } else {
+                    title.to_string()
+                }
+            })
+            .collect::<Vec<String>>()
+    }
+
+    pub(crate) fn sort_violations(&mut self, violations: &mut [Rc<ConstantSummary>]) {
+        match self.sort_column {
+            0 => violations.sort_by(|a, b| a.constant.cmp(&b.constant)),
+            1 => violations.sort_by(|a, b| a.count.cmp(&b.count)),
+            2..=6 => violations.sort_by(|a, b| {
+                a.count_for_violation_type(CONSTANT_VIOLATION_COLUMNS[self.sort_column])
+                    .cmp(&b.count_for_violation_type(CONSTANT_VIOLATION_COLUMNS[self.sort_column]))
+            }),
+            7 => violations.sort_by_key(|a| a.referencing_pack_count()),
+            _ => {}
+        }
+    }
+}
 
 impl ContextMenuViolationDependents {
     pub fn next_sort_column(&mut self) {
@@ -254,6 +337,7 @@ impl ContextMenuViolationDependents {
         }
     }
 }
+
 #[derive(Copy, Clone, Debug)]
 pub struct ContextMenuViolationDependents {
     pub scroll: usize,
@@ -267,6 +351,7 @@ pub struct ContextMenuConstantViolations {
     pub sort_column: usize,
     pub sort_direction: SortDirection,
 }
+
 #[derive(Copy, Clone, Debug)]
 pub enum ContextMenuItem {
     Info(ContextMenuInfo),
