@@ -1,7 +1,8 @@
+use packs::packs::checker::ViolationIdentifier;
 use packs::packs::configuration::Configuration;
 use packs::packs::pack::Pack;
 use ratatui::widgets::ListState;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
 pub struct Packs {
@@ -12,7 +13,7 @@ pub struct Packs {
     pub pack_list: Option<PackList>,
     pub pack_dependents: Option<HashMap<String, BTreeSet<String>>>,
     pub pack_dependent_violations: Option<Vec<PackDependentViolation>>,
-    pub constant_summaries: Option<Vec<Rc<ConstantSummary>>>,
+    pub constant_violation_summaries: Option<ConstantViolationSummaries>,
 }
 
 pub struct PackDependentViolation {
@@ -20,6 +21,11 @@ pub struct PackDependentViolation {
     pub referencing_pack_name: String,
     pub violation_type_counts: HashMap<String, usize>,
     pub constant_counts: HashMap<String, usize>,
+}
+
+pub struct ConstantViolationSummaries {
+    pub constant_summaries: Vec<Rc<ConstantSummary>>,
+    pub filter: String,
 }
 
 pub struct ConstantSummary {
@@ -62,7 +68,7 @@ impl Default for Packs {
         // let timestamp = configuration.pack_set.timestamp();
         Packs {
             configuration,
-            constant_summaries: None,
+            constant_violation_summaries: None,
             // timestamp,
             packs: None,
             pack_list: None,
@@ -87,6 +93,15 @@ impl Packs {
             self.pack_list = Some(PackList::with_items(self.get_packs()));
         }
         self.pack_list.as_mut().unwrap()
+    }
+
+    pub fn get_constant_violation_summaries(&mut self) -> &mut ConstantViolationSummaries {
+        self.check_stale();
+        if self.constant_violation_summaries.is_none() {
+            let violations = &self.configuration.pack_set.all_violations;
+            self.constant_violation_summaries = Some(ConstantViolationSummaries::new(violations));
+        }
+        self.constant_violation_summaries.as_mut().unwrap()
     }
 
     pub fn get_packs(&mut self) -> Vec<Rc<Pack>> {
@@ -196,48 +211,6 @@ impl Packs {
         summary
     }
 
-    pub fn get_constant_summaries(&mut self) -> Vec<Rc<ConstantSummary>> {
-        self.check_stale();
-        if self.constant_summaries.is_none() {
-            let mut constant_summaries: HashMap<(String, String), ConstantSummary> =
-                self.configuration.pack_set.all_violations.iter().fold(
-                    HashMap::new(),
-                    |mut map, violation| {
-                        let defining_pack_name = violation.defining_pack_name.clone();
-                        let constant = violation.constant_name.clone();
-                        let key = (defining_pack_name.clone(), constant.clone());
-                        let entry = map.entry(key).or_insert(ConstantSummary {
-                            defining_pack_name,
-                            constant,
-                            count: 0,
-                            referencing_pack_counts: HashMap::new(),
-                            violation_type_counts: HashMap::new(),
-                        });
-                        entry.count += 1;
-                        entry
-                            .referencing_pack_counts
-                            .entry(violation.referencing_pack_name.clone())
-                            .and_modify(|count| *count += 1)
-                            .or_insert(1);
-                        entry
-                            .violation_type_counts
-                            .entry(violation.violation_type.clone())
-                            .and_modify(|count| *count += 1)
-                            .or_insert(1);
-                        map
-                    },
-                );
-
-            self.constant_summaries = Some(
-                constant_summaries
-                    .drain()
-                    .map(|(_, v)| Rc::new(v))
-                    .collect(),
-            );
-        }
-        self.constant_summaries.as_ref().unwrap().clone()
-    }
-
     pub fn check_stale(&mut self) {
         // let timestamp = self.configuration.pack_set.timestamp();
         // if timestamp > self.timestamp {
@@ -301,7 +274,6 @@ impl PackList {
 
     pub fn filtered_items(&mut self) -> Vec<Rc<Pack>> {
         let filter = self.filter.clone();
-
         match self.filtered_items.get(&filter) {
             Some(items) => items.clone(),
             None => {
@@ -362,5 +334,44 @@ impl PackList {
 
     pub fn unselect(&mut self) {
         self.state.select(None);
+    }
+}
+
+impl ConstantViolationSummaries {
+    pub fn new(violations: &HashSet<ViolationIdentifier>) -> Self {
+        let mut constant_summaries: HashMap<(String, String), ConstantSummary> = violations
+            .iter()
+            .fold(HashMap::new(), |mut map, violation| {
+                let defining_pack_name = violation.defining_pack_name.clone();
+                let constant = violation.constant_name.clone();
+                let key = (defining_pack_name.clone(), constant.clone());
+                let entry = map.entry(key).or_insert(ConstantSummary {
+                    defining_pack_name,
+                    constant,
+                    count: 0,
+                    referencing_pack_counts: HashMap::new(),
+                    violation_type_counts: HashMap::new(),
+                });
+                entry.count += 1;
+                entry
+                    .referencing_pack_counts
+                    .entry(violation.referencing_pack_name.clone())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+                entry
+                    .violation_type_counts
+                    .entry(violation.violation_type.clone())
+                    .and_modify(|count| *count += 1)
+                    .or_insert(1);
+                map
+            });
+
+        Self {
+            constant_summaries: constant_summaries
+                .drain()
+                .map(|(_, v)| Rc::new(v))
+                .collect(),
+            filter: String::default(),
+        }
     }
 }

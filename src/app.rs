@@ -278,12 +278,34 @@ impl ContextMenuConstantViolations {
     pub(crate) fn sort_violations(&mut self, violations: &mut [Rc<ConstantSummary>]) {
         match self.sort_column {
             0 => violations.sort_by(|a, b| a.constant.cmp(&b.constant)),
-            1 => violations.sort_by(|a, b| a.count.cmp(&b.count)),
-            2..=6 => violations.sort_by(|a, b| {
-                a.count_for_violation_type(CONSTANT_VIOLATION_COLUMNS[self.sort_column])
-                    .cmp(&b.count_for_violation_type(CONSTANT_VIOLATION_COLUMNS[self.sort_column]))
+            1 => violations.sort_by(|a, b| {
+                let result = a.count.cmp(&b.count);
+                if result == std::cmp::Ordering::Equal {
+                    a.constant.cmp(&b.constant)
+                } else {
+                    result
+                }
             }),
-            7 => violations.sort_by_key(|a| a.referencing_pack_count_length()),
+            2..=6 => violations.sort_by(|a, b| {
+                let result = a
+                    .count_for_violation_type(CONSTANT_VIOLATION_COLUMNS[self.sort_column])
+                    .cmp(&b.count_for_violation_type(CONSTANT_VIOLATION_COLUMNS[self.sort_column]));
+                if result == std::cmp::Ordering::Equal {
+                    a.constant.cmp(&b.constant)
+                } else {
+                    result
+                }
+            }),
+            7 => violations.sort_by(|a, b| {
+                let result = a
+                    .referencing_pack_count_length()
+                    .cmp(&b.referencing_pack_count_length());
+                if result == std::cmp::Ordering::Equal {
+                    a.constant.cmp(&b.constant)
+                } else {
+                    result
+                }
+            }),
             _ => {}
         }
         if let SortDirection::Descending = self.sort_direction {

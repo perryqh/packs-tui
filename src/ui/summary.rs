@@ -1,6 +1,7 @@
 use crate::app::{App, ContextMenuItem, CONSTANT_VIOLATION_COLUMNS};
-use crate::ui::shared::{build_chunks, build_context_menu, build_top_menu, centered_rect};
-use ratatui::widgets::block::Title;
+use crate::ui::shared::{
+    build_chunks, build_context_menu, build_top_menu, centered_rect, render_filter_textarea,
+};
 use ratatui::{prelude::*, widgets::*};
 
 pub fn render_summary(app: &mut App, frame: &mut Frame) {
@@ -59,8 +60,9 @@ fn render_context_menu_constant_violations(app: &mut App, frame: &mut Frame, rec
             }
         });
     let header = Row::new(header_cells).bold().height(1);
-    let mut violations = app.packs.get_constant_summaries();
-    context_menu_constant_violations.sort_violations(&mut violations);
+    let constant_summaries = app.packs.get_constant_violation_summaries();
+    let violations = &mut constant_summaries.constant_summaries;
+    context_menu_constant_violations.sort_violations(violations);
     let mut scroll = context_menu_constant_violations.scroll;
     if scroll >= violations.len() && !violations.is_empty() {
         scroll = violations.len() - 1;
@@ -93,15 +95,22 @@ fn render_context_menu_constant_violations(app: &mut App, frame: &mut Frame, rec
         .for_each(|h| widths.push(Constraint::Length(h.len() as u16)));
     let table = Table::new(rows, widths)
         .header(header)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(format!("Constant Violations ({})", violations.len()))
-                .title(Title::from(String::from("constants")).alignment(Alignment::Right)),
-        )
+        .block(Block::default().borders(Borders::ALL))
         .highlight_style(selected_style)
         .highlight_symbol(">> ");
-    frame.render_stateful_widget(table, rect, &mut table_state);
+
+    let title_block = Block::default()
+        .title(format!("constant violations ({})", violations.len()))
+        .borders(Borders::ALL);
+    frame.render_widget(title_block, rect);
+
+    let inner_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(vec![Constraint::Percentage(75), Constraint::Length(3)])
+        .margin(1)
+        .split(rect);
+
+    frame.render_stateful_widget(table, inner_layout[0], &mut table_state);
     let mut scrollbar_state = ScrollbarState::default()
         .content_length(violations.len())
         .position(scroll);
@@ -111,10 +120,20 @@ fn render_context_menu_constant_violations(app: &mut App, frame: &mut Frame, rec
         .end_symbol(Some("↓"));
     frame.render_stateful_widget(
         scrollbar,
-        rect.inner(&Margin {
+        inner_layout[0].inner(&Margin {
             vertical: 1,
             horizontal: 0,
         }), // using a inner vertical margin of 1 unit makes the scrollbar inside the block
         &mut scrollbar_state,
+    );
+    let info_layout = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(vec![Constraint::Length(335), Constraint::Percentage(75)])
+        .split(inner_layout[1]);
+    render_filter_textarea(
+        &mut app.menu_context.active_focus,
+        frame,
+        info_layout[0],
+        &constant_summaries.filter,
     );
 }
