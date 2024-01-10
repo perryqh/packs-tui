@@ -2,6 +2,7 @@ use crate::packs::{
     ConstantSummary, PackDependentViolation, Packs, DEPENDENT_PACK_VIOLATION_COUNT_HEADERS,
 };
 use anyhow::Result;
+use crossterm::event::KeyEvent;
 use std::rc::Rc;
 use tui_textarea::TextArea;
 
@@ -175,11 +176,54 @@ impl App<'_> {
     }
 
     pub fn focus_filter(&mut self) {
-        let text = match self.packs.pack_list {
-            Some(ref pack_list) => pack_list.filter.clone(),
-            None => "".to_string(),
+        let text = match &self.menu_context.active_menu_item {
+            MenuItem::Summary => {
+                if let Some(summaries) = &self.packs.constant_violation_summaries {
+                    summaries.filter.clone()
+                } else {
+                    "".to_string()
+                }
+            }
+            MenuItem::Packs => {
+                if let Some(pack_list) = &self.packs.pack_list {
+                    pack_list.filter.clone()
+                } else {
+                    "".to_string()
+                }
+            }
+            _ => "".to_string(),
         };
         self.menu_context.active_focus = ActiveFocus::Filter(TextArea::new(vec![text]));
+    }
+
+    pub fn handle_as_textarea(&mut self, key_event: KeyEvent) -> bool {
+        if let ActiveFocus::Filter(ref mut textarea) = self.menu_context.active_focus {
+            textarea.input(key_event);
+            let filter = textarea.lines().join("");
+            self.update_filter(filter);
+
+            return true;
+        }
+        false
+    }
+
+    pub fn update_filter(&mut self, filter: String) {
+        match (
+            self.menu_context.active_menu_item,
+            self.menu_context.active_context_menu_item,
+        ) {
+            (MenuItem::Packs, _) => {
+                if let Some(ref mut pack_list) = self.packs.pack_list {
+                    pack_list.filter = filter;
+                }
+            }
+            (MenuItem::Summary, ContextMenuItem::ConstantViolations(_)) => {
+                if let Some(ref mut constant) = self.packs.constant_violation_summaries {
+                    constant.filter = filter;
+                }
+            }
+            _ => {}
+        }
     }
 }
 

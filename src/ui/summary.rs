@@ -61,7 +61,7 @@ fn render_context_menu_constant_violations(app: &mut App, frame: &mut Frame, rec
         });
     let header = Row::new(header_cells).bold().height(1);
     let constant_summaries = app.packs.get_constant_violation_summaries();
-    let violations = &mut constant_summaries.constant_summaries;
+    let violations = &mut constant_summaries.filtered_summaries();
     context_menu_constant_violations.sort_violations(violations);
     let mut scroll = context_menu_constant_violations.scroll;
     if scroll >= violations.len() && !violations.is_empty() {
@@ -128,7 +128,7 @@ fn render_context_menu_constant_violations(app: &mut App, frame: &mut Frame, rec
     );
     let info_layout = Layout::default()
         .direction(Direction::Horizontal)
-        .constraints(vec![Constraint::Length(335), Constraint::Percentage(75)])
+        .constraints(vec![Constraint::Length(35), Constraint::Percentage(75)])
         .split(inner_layout[1]);
     render_filter_textarea(
         &mut app.menu_context.active_focus,
@@ -136,4 +136,27 @@ fn render_context_menu_constant_violations(app: &mut App, frame: &mut Frame, rec
         info_layout[0],
         &constant_summaries.filter,
     );
+
+    if let Some(violation) = violations.get(scroll) {
+        let mut pack_counts: Vec<(String, usize)> = violation
+            .referencing_pack_counts
+            .iter()
+            .map(|(pack, count)| (pack.clone(), *count))
+            .collect();
+        pack_counts.sort_by(|a, b| b.1.cmp(&a.1));
+        let spans: Vec<Span> = pack_counts
+            .iter()
+            .flat_map(|(pack, count)| {
+                vec![Span::styled(format!("({})", count), Style::new().light_cyan().italic()),
+                     Span::styled(format!("{} ", pack), Style::new().white()),]
+            })
+            .collect();
+        let line = Line::from(spans);
+        let paragraph = Paragraph::new(line)
+            .block(Block::new().title("pack counts").borders(Borders::ALL))
+            .style(Style::new().white().on_black())
+            .alignment(Alignment::Left)
+            .wrap(Wrap { trim: true });
+        frame.render_widget(paragraph, info_layout[1]);
+    }
 }

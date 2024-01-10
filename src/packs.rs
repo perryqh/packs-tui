@@ -2,6 +2,7 @@ use packs::packs::checker::ViolationIdentifier;
 use packs::packs::configuration::Configuration;
 use packs::packs::pack::Pack;
 use ratatui::widgets::ListState;
+use regex::RegexBuilder;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
 
@@ -373,5 +374,17 @@ impl ConstantViolationSummaries {
                 .collect(),
             filter: String::default(),
         }
+    }
+
+    pub fn filtered_summaries(&mut self) -> Vec<Rc<ConstantSummary>> {
+        let regex = RegexBuilder::new(&self.filter)
+            .case_insensitive(true)
+            .build()
+            .expect("invalid regex");
+        self.constant_summaries
+            .iter()
+            .filter(|summary| regex.is_match(&summary.constant))
+            .cloned()
+            .collect()
     }
 }

@@ -1,4 +1,4 @@
-use crate::app::{ActiveFocus, App, AppResult};
+use crate::app::{App, AppResult};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 /// Handles the key events and updates the state of [`App`].
@@ -27,11 +27,7 @@ pub fn handle_key_events(key_event: KeyEvent, app: &mut App) -> AppResult<()> {
         }
         _ => {}
     }
-    if let ActiveFocus::Filter(ref mut textarea) = app.menu_context.active_focus {
-        textarea.input(key_event);
-        if let Some(ref mut pack_list) = app.packs.pack_list {
-            pack_list.filter = textarea.lines().join("");
-        }
+    if app.handle_as_textarea(key_event) {
         return Ok(());
     }
     match key_event.code {
