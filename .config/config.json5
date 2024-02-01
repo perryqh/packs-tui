@@ -1,0 +1,29 @@
+{
+  "keybindings": {
+    "Home": {
+      "<q>": "Quit", // Quit the application
+      "<Ctrl-d>": "Quit", // Another way to quit
+      "<Ctrl-c>": "Quit", // Yet another way to quit
+      "<Ctrl-z>": "Suspend", // Suspend the application
+      "<down>": "Down", // Go to the next item
+      "<j>": "Down", // Go to the next item
+      "<Shift-j>": "SortAscending",
+      "<Shift-down>": "SortAscending",
+      "<up>": "Up", // Go to the previous item
+      "<k>": "Up", // Go to the previous item
+      "<Shift-k>": "SortDescending",
+      "<Shift-up>": "SortDescending",
+      "<left>": "Left",
+      "<h>": "Left",
+      "<enter>": "Right",
+      "<right>": "Right",
+      "<l>": "Right",
+      "<0>": "UncontainedOutViolations",
+      "<1>": "UncontainedInViolations",
+      "<2>": "ContainedOutViolations",
+      "<3>": "ContainedInViolations",
+      "<tab>": "NextTab",
+      "<esc>": "Escape",
+    },
+  }
+}

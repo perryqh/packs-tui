@@ -1,0 +1,10 @@
+[package]
+name = "packs-client"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+#models = { path = "../packs" }
+pks = { git = "https://github.com/perryqh/packs.git", branch = "ph/tui-apis" }
